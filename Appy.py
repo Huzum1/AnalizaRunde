@@ -221,8 +221,7 @@ with st.form("form_runde"):
             runde_noi_filtrate = [r for r in noi if r not in runde_existente]
             st.session_state.runde.extend(runde_noi_filtrate)
             st.success(f"Adăugate {len(runde_noi_filtrate)} runde unice.")
-            # Șterge textul din box după adăugare
-            st.session_state.input_runde = "" 
+            # ## LINIA EROANATĂ A FOST ȘTEARSĂ DE AICI ##
             st.rerun()
     with c2:
         if st.form_submit_button("❌ Șterge toate"):
@@ -268,7 +267,7 @@ def afiseaza_chenar(i):
                     
                     st.session_state[key].extend(variante_noi_filtrate)
                     st.success(f"Adăugate {len(variante_noi_filtrate)} variante unice în Chenarul {i}.")
-                    st.session_state[f"input_var_{i}"] = "" # Golește text area
+                    # ## LINIA EROANATĂ A FOST ȘTEARSĂ DE AICI (cea din poza ta) ##
                     st.rerun()
             with c2:
                 if st.form_submit_button("❌ Șterge"):
@@ -407,4 +406,4 @@ else:
     st.warning("Te rog adaugă cel puțin o rundă și o variantă pentru a începe analiza.")
 
 # ================= SIDEBAR =================
-# Secțiunea de Backup & Restore a fost eliminată conform solicitării.
+# Secțiunea de Backup & Restore a fost eliminată anterior.
