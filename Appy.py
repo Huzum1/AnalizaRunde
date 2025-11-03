@@ -520,8 +520,8 @@ if st.session_state.runde and toate_variantele:
         
         # Opțiune Copy to Clipboard
         text_pentru_clipboard = "\n".join([
-            f"{idx}. [{var['chenar']}] ID {var['id']}: {' '.join(map(str, var['numere']))} | Scor: {var['scor']} | Câștiguri: {var['castiguri']}"
-            for idx, var in enumerate(top_variante, 1)
+            f"{var['id']}, {' '.join(map(str, var['numere']))}"
+            for var in top_variante
         ])
         
         st.download_button(
