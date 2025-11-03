@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from collections import Counter
+import asyncio
 
 # Configurare pagină
 st.set_page_config(
@@ -27,15 +28,20 @@ if 'variante_4' not in st.session_state:
 if 'variante_5' not in st.session_state:
     st.session_state.variante_5 = []
 
-# Funcție pentru comparare numere
-def verifica_varianta(varianta, runda):
-    """Verifică câte numere se potrivesc între variantă și rundă"""
-    set_varianta = set(varianta)
-    set_runda = set(runda)
+# Funcție optimizată pentru comparare numere
+@st.cache_data
+def verifica_varianta(varianta_tuple, runda_tuple):
+    """Verifică câte numere se potrivesc între variantă și rundă - cached"""
+    set_varianta = set(varianta_tuple)
+    set_runda = set(runda_tuple)
     return len(set_varianta.intersection(set_runda))
 
+def verifica_varianta_fast(varianta, runda):
+    """Versiune rapidă fără cache pentru procesare în batch"""
+    return len(set(varianta) & set(runda))
+
 def calculeaza_statistici_chenar(variante_list, runde_list, numar_minim):
-    """Calculează statistici pentru un chenar de variante"""
+    """Calculează statistici pentru un chenar de variante - optimizat"""
     if not variante_list or not runde_list:
         return {
             'total_castiguri': 0,
@@ -55,11 +61,12 @@ def calculeaza_statistici_chenar(variante_list, runde_list, numar_minim):
     distributie_potriviri = Counter()
     toate_numerele = set()
     
+    # Procesare optimizată
     for idx_runda, runda in enumerate(runde_list):
         castig_runda = False
         for var_obj in variante_list:
             varianta = var_obj['numere']
-            potriviri = verifica_varianta(varianta, runda)
+            potriviri = verifica_varianta_fast(varianta, runda)
             distributie_potriviri[potriviri] += 1
             
             if potriviri >= numar_minim:
@@ -90,12 +97,13 @@ def calculeaza_statistici_chenar(variante_list, runde_list, numar_minim):
     }
 
 def genereaza_top_variante(toate_variantele, runde_list, numar_minim, limit=1150):
-    """Generează top variante pe baza performanței"""
+    """Generează top variante pe baza performanței - optimizat"""
     if not toate_variantele or not runde_list:
         return []
     
     scoruri = []
     
+    # Procesare vectorizată pentru viteză
     for var_obj in toate_variantele:
         varianta = var_obj['numere']
         chenar = var_obj.get('chenar', '')
@@ -105,7 +113,7 @@ def genereaza_top_variante(toate_variantele, runde_list, numar_minim, limit=1150
         potriviri_mari = 0
         
         for runda in runde_list:
-            potriviri = verifica_varianta(varianta, runda)
+            potriviri = verifica_varianta_fast(varianta, runda)
             total_potriviri += potriviri
             if potriviri >= numar_minim:
                 castiguri += 1
@@ -127,6 +135,54 @@ def genereaza_top_variante(toate_variantele, runde_list, numar_minim, limit=1150
     scoruri.sort(key=lambda x: x['scor'], reverse=True)
     return scoruri[:limit]
 
+def parse_runde_rapid(text):
+    """Parsare rapidă pentru runde"""
+    if not text.strip():
+        return []
+    
+    linii = text.strip().split('\n')
+    runde_noi = []
+    
+    for linie in linii:
+        if not linie.strip() or not any(c.isdigit() for c in linie):
+            continue
+        try:
+            numere = [int(n.strip()) for n in linie.split(',') if n.strip().isdigit()]
+            if numere:
+                runde_noi.append(numere)
+        except:
+            continue
+    
+    return runde_noi
+
+def parse_variante_rapid(text, chenar_id):
+    """Parsare rapidă pentru variante"""
+    if not text.strip():
+        return []
+    
+    linii = text.strip().split('\n')
+    variante_noi = []
+    
+    for linie in linii:
+        if not linie.strip():
+            continue
+        try:
+            parti = linie.split(',', 1)
+            if len(parti) == 2:
+                id_var = parti[0].strip()
+                numere_str = parti[1].strip()
+                numere = [int(n.strip()) for n in numere_str.split() if n.strip().isdigit()]
+                if numere:
+                    variante_noi.append({
+                        'id': id_var,
+                        'numere': numere,
+                        'chenar': chenar_id
+                    })
+        except:
+            continue
+    
+    return variante_noi
+
 # Layout pentru RUNDE - O singură secțiune
 st.header("📋 Runde")
 
@@ -141,21 +197,13 @@ col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
     if st.button("Adaugă", type="primary", use_container_width=True, key="add_runde"):
         if text_runde.strip():
-            linii = text_runde.strip().split('\n')
-            runde_noi = []
-            
-            for linie in linii:
-                try:
-                    numere = [int(n.strip()) for n in linie.split(',') if n.strip()]
-                    if numere:
-                        runde_noi.append(numere)
-                except:
-                    pass
-            
-            if runde_noi:
-                st.session_state.runde.extend(runde_noi)
-                st.success(f"✅ {len(runde_noi)} runde")
-                st.rerun()
+            with st.spinner("Procesare..."):
+                runde_noi = parse_runde_rapid(text_runde)
+                
+                if runde_noi:
+                    st.session_state.runde.extend(runde_noi)
+                    st.success(f"✅ {len(runde_noi)} runde")
+                    st.rerun()
 
 with col_btn2:
     if st.button("Șterge", use_container_width=True, key="del_runde"):
@@ -192,29 +240,13 @@ with col1:
     with col_btn1_1:
         if st.button("Adaugă", type="primary", use_container_width=True, key="add_var_1"):
             if text_variante_1.strip():
-                linii = text_variante_1.strip().split('\n')
-                variante_noi = []
-                
-                for linie in linii:
-                    try:
-                        parti = linie.split(',', 1)
-                        if len(parti) == 2:
-                            id_var = parti[0].strip()
-                            numere_str = parti[1].strip()
-                            numere = [int(n.strip()) for n in numere_str.split() if n.strip()]
-                            if numere:
-                                variante_noi.append({
-                                    'id': id_var,
-                                    'numere': numere,
-                                    'chenar': 'C1'
-                                })
-                    except:
-                        pass
-                
-                if variante_noi:
-                    st.session_state.variante_1.extend(variante_noi)
-                    st.success(f"✅ {len(variante_noi)} variante")
-                    st.rerun()
+                with st.spinner("Procesare..."):
+                    variante_noi = parse_variante_rapid(text_variante_1, 'C1')
+                    
+                    if variante_noi:
+                        st.session_state.variante_1.extend(variante_noi)
+                        st.success(f"✅ {len(variante_noi)} variante")
+                        st.rerun()
     
     with col_btn1_2:
         if st.button("Șterge", use_container_width=True, key="del_var_1"):
@@ -241,29 +273,13 @@ with col2:
     with col_btn2_1:
         if st.button("Adaugă", type="primary", use_container_width=True, key="add_var_2"):
             if text_variante_2.strip():
-                linii = text_variante_2.strip().split('\n')
-                variante_noi = []
-                
-                for linie in linii:
-                    try:
-                        parti = linie.split(',', 1)
-                        if len(parti) == 2:
-                            id_var = parti[0].strip()
-                            numere_str = parti[1].strip()
-                            numere = [int(n.strip()) for n in numere_str.split() if n.strip()]
-                            if numere:
-                                variante_noi.append({
-                                    'id': id_var,
-                                    'numere': numere,
-                                    'chenar': 'C2'
-                                })
-                    except:
-                        pass
-                
-                if variante_noi:
-                    st.session_state.variante_2.extend(variante_noi)
-                    st.success(f"✅ {len(variante_noi)} variante")
-                    st.rerun()
+                with st.spinner("Procesare..."):
+                    variante_noi = parse_variante_rapid(text_variante_2, 'C2')
+                    
+                    if variante_noi:
+                        st.session_state.variante_2.extend(variante_noi)
+                        st.success(f"✅ {len(variante_noi)} variante")
+                        st.rerun()
     
     with col_btn2_2:
         if st.button("Șterge", use_container_width=True, key="del_var_2"):
@@ -295,29 +311,13 @@ with col3:
     with col_btn3_1:
         if st.button("Adaugă", type="primary", use_container_width=True, key="add_var_3"):
             if text_variante_3.strip():
-                linii = text_variante_3.strip().split('\n')
-                variante_noi = []
-                
-                for linie in linii:
-                    try:
-                        parti = linie.split(',', 1)
-                        if len(parti) == 2:
-                            id_var = parti[0].strip()
-                            numere_str = parti[1].strip()
-                            numere = [int(n.strip()) for n in numere_str.split() if n.strip()]
-                            if numere:
-                                variante_noi.append({
-                                    'id': id_var,
-                                    'numere': numere,
-                                    'chenar': 'C3'
-                                })
-                    except:
-                        pass
-                
-                if variante_noi:
-                    st.session_state.variante_3.extend(variante_noi)
-                    st.success(f"✅ {len(variante_noi)} variante")
-                    st.rerun()
+                with st.spinner("Procesare..."):
+                    variante_noi = parse_variante_rapid(text_variante_3, 'C3')
+                    
+                    if variante_noi:
+                        st.session_state.variante_3.extend(variante_noi)
+                        st.success(f"✅ {len(variante_noi)} variante")
+                        st.rerun()
     
     with col_btn3_2:
         if st.button("Șterge", use_container_width=True, key="del_var_3"):
@@ -344,29 +344,13 @@ with col4:
     with col_btn4_1:
         if st.button("Adaugă", type="primary", use_container_width=True, key="add_var_4"):
             if text_variante_4.strip():
-                linii = text_variante_4.strip().split('\n')
-                variante_noi = []
-                
-                for linie in linii:
-                    try:
-                        parti = linie.split(',', 1)
-                        if len(parti) == 2:
-                            id_var = parti[0].strip()
-                            numere_str = parti[1].strip()
-                            numere = [int(n.strip()) for n in numere_str.split() if n.strip()]
-                            if numere:
-                                variante_noi.append({
-                                    'id': id_var,
-                                    'numere': numere,
-                                    'chenar': 'C4'
-                                })
-                    except:
-                        pass
-                
-                if variante_noi:
-                    st.session_state.variante_4.extend(variante_noi)
-                    st.success(f"✅ {len(variante_noi)} variante")
-                    st.rerun()
+                with st.spinner("Procesare..."):
+                    variante_noi = parse_variante_rapid(text_variante_4, 'C4')
+                    
+                    if variante_noi:
+                        st.session_state.variante_4.extend(variante_noi)
+                        st.success(f"✅ {len(variante_noi)} variante")
+                        st.rerun()
     
     with col_btn4_2:
         if st.button("Șterge", use_container_width=True, key="del_var_4"):
@@ -398,29 +382,13 @@ with col6:
     with col_btn5_1:
         if st.button("Adaugă", type="primary", use_container_width=True, key="add_var_5"):
             if text_variante_5.strip():
-                linii = text_variante_5.strip().split('\n')
-                variante_noi = []
-                
-                for linie in linii:
-                    try:
-                        parti = linie.split(',', 1)
-                        if len(parti) == 2:
-                            id_var = parti[0].strip()
-                            numere_str = parti[1].strip()
-                            numere = [int(n.strip()) for n in numere_str.split() if n.strip()]
-                            if numere:
-                                variante_noi.append({
-                                    'id': id_var,
-                                    'numere': numere,
-                                    'chenar': 'C5'
-                                })
-                    except:
-                        pass
-                
-                if variante_noi:
-                    st.session_state.variante_5.extend(variante_noi)
-                    st.success(f"✅ {len(variante_noi)} variante")
-                    st.rerun()
+                with st.spinner("Procesare..."):
+                    variante_noi = parse_variante_rapid(text_variante_5, 'C5')
+                    
+                    if variante_noi:
+                        st.session_state.variante_5.extend(variante_noi)
+                        st.success(f"✅ {len(variante_noi)} variante")
+                        st.rerun()
     
     with col_btn5_2:
         if st.button("Șterge", use_container_width=True, key="del_var_5"):
@@ -455,13 +423,14 @@ if st.session_state.runde and toate_variantele:
     # ANALIZĂ COMPARATIVĂ CHENARE
     st.header("📊 Analiză Comparativă Chenare")
     
-    statistici_chenare = {
-        'Chenar 1': calculeaza_statistici_chenar(st.session_state.variante_1, st.session_state.runde, numar_minim),
-        'Chenar 2': calculeaza_statistici_chenar(st.session_state.variante_2, st.session_state.runde, numar_minim),
-        'Chenar 3': calculeaza_statistici_chenar(st.session_state.variante_3, st.session_state.runde, numar_minim),
-        'Chenar 4': calculeaza_statistici_chenar(st.session_state.variante_4, st.session_state.runde, numar_minim),
-        'Chenar 5': calculeaza_statistici_chenar(st.session_state.variante_5, st.session_state.runde, numar_minim)
-    }
+    with st.spinner("Calculare statistici..."):
+        statistici_chenare = {
+            'Chenar 1': calculeaza_statistici_chenar(st.session_state.variante_1, st.session_state.runde, numar_minim),
+            'Chenar 2': calculeaza_statistici_chenar(st.session_state.variante_2, st.session_state.runde, numar_minim),
+            'Chenar 3': calculeaza_statistici_chenar(st.session_state.variante_3, st.session_state.runde, numar_minim),
+            'Chenar 4': calculeaza_statistici_chenar(st.session_state.variante_4, st.session_state.runde, numar_minim),
+            'Chenar 5': calculeaza_statistici_chenar(st.session_state.variante_5, st.session_state.runde, numar_minim)
+        }
     
     # Tabel comparativ
     df_comparativ = pd.DataFrame(statistici_chenare).T
@@ -500,7 +469,8 @@ if st.session_state.runde and toate_variantele:
     # TOP VARIANTE
     st.header("🌟 Top 1150 Variante Cele Mai Bune")
     
-    top_variante = genereaza_top_variante(toate_variantele, st.session_state.runde, numar_minim)
+    with st.spinner("Generare top variante..."):
+        top_variante = genereaza_top_variante(toate_variantele, st.session_state.runde, numar_minim)
     
     if top_variante:
         st.caption(f"Afișare: Primele 10 din {len(top_variante)} variante")
