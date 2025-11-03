@@ -361,37 +361,149 @@ if toate_rundele and st.session_state.variante:
     
     st.divider()
     
-    # Container cu scroll pentru rezultate
-    rezultate_container = st.container(height=300)
-    with rezultate_container:
-        for i, runda in enumerate(toate_rundele, 1):
-            castiguri = 0
-            
+    # REZULTATE CHENAR 1
+    if st.session_state.runde_1:
+        st.subheader("📋 Rezultate Chenar 1")
+        rezultate_container_1 = st.container(height=200)
+        with rezultate_container_1:
+            for i, runda in enumerate(st.session_state.runde_1, 1):
+                castiguri = 0
+                for var_obj in st.session_state.variante:
+                    varianta = var_obj['numere']
+                    potriviri = verifica_varianta(varianta, runda)
+                    if potriviri >= numar_minim:
+                        castiguri += 1
+                st.text(f"Runda {i} - {castiguri} variante câștigătoare")
+        
+        total_castiguri_1 = 0
+        for runda in st.session_state.runde_1:
             for var_obj in st.session_state.variante:
-                varianta = var_obj['numere']
-                potriviri = verifica_varianta(varianta, runda)
-                
-                if potriviri >= numar_minim:
-                    castiguri += 1
-            
-            st.text(f"Runda {i} - {castiguri} variante câștigătoare")
+                if verifica_varianta(var_obj['numere'], runda) >= numar_minim:
+                    total_castiguri_1 += 1
+        
+        col_s1_1, col_s1_2, col_s1_3 = st.columns(3)
+        with col_s1_1:
+            st.metric("Runde", len(st.session_state.runde_1))
+        with col_s1_2:
+            st.metric("Variante", len(st.session_state.variante))
+        with col_s1_3:
+            st.metric("Câștiguri", total_castiguri_1)
+        st.divider()
     
-    # Statistici compacte
-    st.divider()
-    col_s1, col_s2, col_s3 = st.columns(3)
+    # REZULTATE CHENAR 2
+    if st.session_state.runde_2:
+        st.subheader("📋 Rezultate Chenar 2")
+        rezultate_container_2 = st.container(height=200)
+        with rezultate_container_2:
+            for i, runda in enumerate(st.session_state.runde_2, 1):
+                castiguri = 0
+                for var_obj in st.session_state.variante:
+                    varianta = var_obj['numere']
+                    potriviri = verifica_varianta(varianta, runda)
+                    if potriviri >= numar_minim:
+                        castiguri += 1
+                st.text(f"Runda {i} - {castiguri} variante câștigătoare")
+        
+        total_castiguri_2 = 0
+        for runda in st.session_state.runde_2:
+            for var_obj in st.session_state.variante:
+                if verifica_varianta(var_obj['numere'], runda) >= numar_minim:
+                    total_castiguri_2 += 1
+        
+        col_s2_1, col_s2_2, col_s2_3 = st.columns(3)
+        with col_s2_1:
+            st.metric("Runde", len(st.session_state.runde_2))
+        with col_s2_2:
+            st.metric("Variante", len(st.session_state.variante))
+        with col_s2_3:
+            st.metric("Câștiguri", total_castiguri_2)
+        st.divider()
     
-    total_castiguri = 0
-    for runda in toate_rundele:
-        for var_obj in st.session_state.variante:
-            if verifica_varianta(var_obj['numere'], runda) >= numar_minim:
-                total_castiguri += 1
+    # REZULTATE CHENAR 3
+    if st.session_state.runde_3:
+        st.subheader("📋 Rezultate Chenar 3")
+        rezultate_container_3 = st.container(height=200)
+        with rezultate_container_3:
+            for i, runda in enumerate(st.session_state.runde_3, 1):
+                castiguri = 0
+                for var_obj in st.session_state.variante:
+                    varianta = var_obj['numere']
+                    potriviri = verifica_varianta(varianta, runda)
+                    if potriviri >= numar_minim:
+                        castiguri += 1
+                st.text(f"Runda {i} - {castiguri} variante câștigătoare")
+        
+        total_castiguri_3 = 0
+        for runda in st.session_state.runde_3:
+            for var_obj in st.session_state.variante:
+                if verifica_varianta(var_obj['numere'], runda) >= numar_minim:
+                    total_castiguri_3 += 1
+        
+        col_s3_1, col_s3_2, col_s3_3 = st.columns(3)
+        with col_s3_1:
+            st.metric("Runde", len(st.session_state.runde_3))
+        with col_s3_2:
+            st.metric("Variante", len(st.session_state.variante))
+        with col_s3_3:
+            st.metric("Câștiguri", total_castiguri_3)
+        st.divider()
     
-    with col_s1:
-        st.metric("Runde", len(toate_rundele))
-    with col_s2:
-        st.metric("Variante", len(st.session_state.variante))
-    with col_s3:
-        st.metric("Câștiguri", total_castiguri)
+    # REZULTATE CHENAR 4
+    if st.session_state.runde_4:
+        st.subheader("📋 Rezultate Chenar 4")
+        rezultate_container_4 = st.container(height=200)
+        with rezultate_container_4:
+            for i, runda in enumerate(st.session_state.runde_4, 1):
+                castiguri = 0
+                for var_obj in st.session_state.variante:
+                    varianta = var_obj['numere']
+                    potriviri = verifica_varianta(varianta, runda)
+                    if potriviri >= numar_minim:
+                        castiguri += 1
+                st.text(f"Runda {i} - {castiguri} variante câștigătoare")
+        
+        total_castiguri_4 = 0
+        for runda in st.session_state.runde_4:
+            for var_obj in st.session_state.variante:
+                if verifica_varianta(var_obj['numere'], runda) >= numar_minim:
+                    total_castiguri_4 += 1
+        
+        col_s4_1, col_s4_2, col_s4_3 = st.columns(3)
+        with col_s4_1:
+            st.metric("Runde", len(st.session_state.runde_4))
+        with col_s4_2:
+            st.metric("Variante", len(st.session_state.variante))
+        with col_s4_3:
+            st.metric("Câștiguri", total_castiguri_4)
+        st.divider()
+    
+    # REZULTATE CHENAR 5
+    if st.session_state.runde_5:
+        st.subheader("📋 Rezultate Chenar 5")
+        rezultate_container_5 = st.container(height=200)
+        with rezultate_container_5:
+            for i, runda in enumerate(st.session_state.runde_5, 1):
+                castiguri = 0
+                for var_obj in st.session_state.variante:
+                    varianta = var_obj['numere']
+                    potriviri = verifica_varianta(varianta, runda)
+                    if potriviri >= numar_minim:
+                        castiguri += 1
+                st.text(f"Runda {i} - {castiguri} variante câștigătoare")
+        
+        total_castiguri_5 = 0
+        for runda in st.session_state.runde_5:
+            for var_obj in st.session_state.variante:
+                if verifica_varianta(var_obj['numere'], runda) >= numar_minim:
+                    total_castiguri_5 += 1
+        
+        col_s5_1, col_s5_2, col_s5_3 = st.columns(3)
+        with col_s5_1:
+            st.metric("Runde", len(st.session_state.runde_5))
+        with col_s5_2:
+            st.metric("Variante", len(st.session_state.variante))
+        with col_s5_3:
+            st.metric("Câștiguri", total_castiguri_5)
 
 else:
     st.info("Adaugă runde și variante pentru verificare")
