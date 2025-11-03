@@ -8,23 +8,27 @@ import random
 # ================= CONFIG =================
 st.set_page_config(
     page_title="Loterie AI – Top 1150",
-    page_icon="crystal_ball",
+    page_icon="🔮", # Emoji funcționează direct
     layout="wide"
 )
 
-st.title("crystal_ball **Loterie AI – Top 1150 Variante Inteligente**")
+st.title("🔮 **Loterie AI – Top 1150 Variante Inteligente**")
 st.divider()
 
 # ================= SESSION STATE =================
-for key in ['runde', 'variante_1', 'variante_2', 'variante_3', 'variante_4', 'variante_5']:
+# Inițializare mai curată a session state
+list_keys = ['runde'] + [f'variante_{i}' for i in range(1, 6)]
+page_keys = ['page_runde'] + [f'page_var{i}' for i in range(1, 6)]
+
+for key in list_keys:
     if key not in st.session_state:
         st.session_state[key] = []
-for key in ['page_runde'] + [f'page_var{i}' for i in range(1,6)]:
+for key in page_keys:
     if key not in st.session_state:
         st.session_state[key] = 1
 
 # ================= PARSARE FLEXIBILĂ (ORICE FORMAT!) =================
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner="Se parsează rundele...")
 def parse_runde(text):
     if not text.strip(): return []
     runde = []
@@ -37,7 +41,7 @@ def parse_runde(text):
             runde.append(tuple(sorted(nums[:6])))
     return runde
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner="Se parsează variantele...")
 def parse_variante(text, chenar):
     if not text.strip(): return []
     variante = []
@@ -56,50 +60,113 @@ def parse_variante(text, chenar):
                     'numere': tuple(sorted(nums[:6])),
                     'chenar': chenar
                 })
-        except:
+        except ValueError:
+            # Ignoră silențios liniile cu format invalid
             continue
     return variante
 
 def potriviri(v, r): return len(set(v) & set(r))
 
 # ================= SCOR AI =================
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner="Se calculează Scor AI (Top 1150)...")
 def calculeaza_scoruri_ai(_variante, _runde, min_match):
     if not _runde or not _variante: return []
     rezultate = []
     total = len(_variante)
-    progress = st.progress(0)
+    progress = st.progress(0, text="Se analizează variantele...")
+    
+    # Pre-calculează potrivirile pentru eficiență
+    potriviri_runde = [
+        [potriviri(var['numere'], r) >= min_match for r in _runde]
+        for var in _variante
+    ]
+
     for idx, var in enumerate(_variante):
         v = var['numere']
-        castiguri = sum(1 for r in _runde if potriviri(v, r) >= min_match)
+        rez_runde = potriviri_runde[idx]
+        
+        castiguri = sum(rez_runde)
+        
         window = 10
-        wins = [any(potriviri(v, r) >= min_match for r in _runde[i:i+window]) 
+        # Calculează câștigurile pe ferestre
+        wins = [any(rez_runde[i:i+window]) 
                 for i in range(0, len(_runde), window)]
-        mean = sum(wins) / len(wins) if wins else 0
-        variance = sum((x - mean)**2 for x in wins) / len(wins) if wins else 0
-        consistenta = max(0, 1 - (variance ** 0.5))
-        recent = sum(wins[-3:]) / min(3, len(wins)) if wins else 0
-        scor = castiguri * 8 + mean * 100 + consistenta * 50 + recent * 120 + len(set(v)) * 2
+        
+        if not wins:
+            mean = 0
+            variance = 0
+            consistenta = 0
+            recent = 0
+        else:
+            mean = sum(wins) / len(wins)
+            variance = sum((x - mean)**2 for x in wins) / len(wins)
+            consistenta = max(0, 1 - (variance ** 0.5))
+            recent = sum(wins[-3:]) / min(3, len(wins))
+
+        # Punctajul pentru unicitatea numerelor (penalizează duplicatele)
+        unicitate = len(set(v)) 
+        
+        scor = (castiguri * 8) + (mean * 100) + (consistenta * 50) + (recent * 120) + (unicitate * 2)
+        
         rezultate.append({**var, 'scor_ai': round(scor, 2), 'castiguri': castiguri})
-        progress.progress((idx + 1) / total)
+        progress.progress((idx + 1) / total, text=f"Se analizează variantele... {idx+1}/{total}")
+        
     progress.empty()
-    return rezultate
+    
+    # Returnează lista sortată direct
+    return sorted(rezultate, key=lambda x: x['scor_ai'], reverse=True)
 
 # ================= ACOPERIRE MINIMĂ =================
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner="Se calculează acoperirea minimă...")
 def acoperire_minima(_variante, _runde, min_match):
-    runde_castig = [i for i, r in enumerate(_runde) if any(potriviri(v['numere'], r) >= min_match for v in _variante)]
+    # Identifică indecșii rundelor care au avut cel puțin un câștig
+    runde_castig = {i for i, r in enumerate(_runde) 
+                    if any(potriviri(v['numere'], r) >= min_match for v in _variante)}
+    
     if not runde_castig: return []
+
     acoperite = set()
     selectate = []
-    ramase = _variante[:]
-    while len(acoperite) < len(runde_castig) and ramase:
-        best = max(ramase, key=lambda v: sum(1 for i in runde_castig if i not in acoperite and potriviri(v['numere'], _runde[i]) >= min_match), default=None)
-        if not best: break
-        selectate.append(best)
-        acoperite.update(i for i in runde_castig if potriviri(best['numere'], _runde[i]) >= min_match)
-        ramase = [v for v in ramase if v['id'] != best['id']]
+    
+    # Pre-calculează ce runde acoperă fiecare variantă
+    var_acopera = {
+        v['id']: {i for i in runde_castig if potriviri(v['numere'], _runde[i]) >= min_match}
+        for v in _variante
+    }
+    
+    # Folosim un dicționar pentru a elimina variantele selectate
+    ramase = {v['id']: var_acopera[v['id']] for v in _variante if var_acopera[v['id']]}
+    variante_dict = {v['id']: v for v in _variante}
+
+    while acoperite != runde_castig and ramase:
+        # Găsește varianta care acoperă cele mai multe runde *încă neacoperite*
+        best_id = max(ramase, key=lambda id_var: len(ramase[id_var] - acoperite))
+        
+        runde_noi_acoperite = ramase[best_id] - acoperite
+        
+        # Dacă cea mai bună variantă nu adaugă nimic nou, ne oprim
+        if not runde_noi_acoperite:
+            break
+            
+        selectate.append(variante_dict[best_id])
+        acoperite.update(runde_noi_acoperite)
+        del ramase[best_id] # Elimină varianta selectată
+
     return selectate
+
+# ================= CONSISTENȚĂ =================
+@st.cache_data(show_spinner="Se calculează consistența...")
+def calculeaza_consistenta(_variante, _runde, min_match):
+    if not _runde or not _variante: return []
+    rez = []
+    total_runde = len(_runde)
+    
+    for v in _variante:
+        castiguri = sum(1 for r in _runde if potriviri(v['numere'], r) >= min_match)
+        frecventa = (castiguri / total_runde) if total_runde > 0 else 0
+        rez.append({**v, 'frecventa': frecventa})
+        
+    return sorted(rez, key=lambda x: x['frecventa'], reverse=True)
 
 # ================= PAGINARE =================
 def paginare(df, key, page_size=50, height=300):
@@ -107,150 +174,237 @@ def paginare(df, key, page_size=50, height=300):
     if total == 0: 
         st.info("Nicio intrare.")
         return
+        
     page = st.session_state.get(f'page_{key}', 1)
     total_pages = max(1, (total - 1) // page_size + 1)
+    
+    # Asigură-te că pagina curentă este validă (de ex. dacă datele s-au șters)
+    page = max(1, min(page, total_pages))
+    st.session_state[f'page_{key}'] = page
+    
     start = (page - 1) * page_size
     end = start + page_size
+    
     df_page = df.iloc[start:end].copy()
-    df_page.index = range(start + 1, end + 1)
+    # Resetează indexul pentru a începe de la 1 (sau start+1)
+    df_page.index = range(start + 1, len(df_page) + start + 1)
+    
     st.dataframe(df_page, use_container_width=True, height=height)
+    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
-        if st.button("Previous", key=f"prev_{key}", disabled=page <= 1):
-            st.session_state[f'page_{key}'] = page - 1
+        if st.button("⬅️ Anterior", key=f"prev_{key}", disabled=page <= 1):
+            st.session_state[f'page_{key}'] -= 1
             st.rerun()
     with col2:
         st.write(f"**Pagina {page} / {total_pages}** | Total: {total}")
     with col3:
-        if st.button("Next", key=f"next_{key}", disabled=page >= total_pages):
-            st.session_state[f'page_{key}'] = page + 1
+        if st.button("Următor ➡️", key=f"next_{key}", disabled=page >= total_pages):
+            st.session_state[f'page_{key}'] += 1
             st.rerun()
 
 # ================= UI: RUNDE =================
-st.header("clipboard **Runde**")
+st.header("📋 **Runde**")
 with st.form("form_runde"):
     text_runde = st.text_area(
-        "Ex: 1,6,7,9,44,77  sau  1 6 7 9 44 77",
+        "Lipește rundele aici. Un rând per rundă. Numere separate prin spațiu sau virgulă.",
         height=120,
         placeholder="1,6,7,9,44,77\n2 5 3 77 6 56",
         key="input_runde"
     )
     c1, c2 = st.columns(2)
     with c1:
-        if st.form_submit_button("Adaugă runde", type="primary"):
+        if st.form_submit_button("✅ Adaugă runde", type="primary"):
             noi = parse_runde(text_runde)
-            st.session_state.runde.extend(noi)
-            st.success(f"Adăugate {len(noi)} runde")
+            # Evită duplicatele
+            runde_existente = set(st.session_state.runde)
+            runde_noi_filtrate = [r for r in noi if r not in runde_existente]
+            st.session_state.runde.extend(runde_noi_filtrate)
+            st.success(f"Adăugate {len(runde_noi_filtrate)} runde unice.")
+            # Șterge textul din box după adăugare
+            st.session_state.input_runde = "" 
             st.rerun()
     with c2:
-        if st.form_submit_button("Șterge toate"):
+        if st.form_submit_button("❌ Șterge toate"):
             st.session_state.runde = []
+            st.success("Toate rundele au fost șterse.")
             st.rerun()
 
-with st.expander("Afișează rundele"):
+with st.expander(f"Afișează rundele ({len(st.session_state.runde)} în total)"):
     if st.session_state.runde:
+        # DataFrame-ul este creat cu numerele, coloanele sunt numite automat 0-5
         df = pd.DataFrame(st.session_state.runde)
-        df.index = range(1, len(df)+1)
         paginare(df, "runde")
     else:
-        st.info("Nicio rundă.")
+        st.info("Nicio rundă adăugată.")
 
 st.divider()
 
 # ================= UI: CHENARE =================
-st.header("game_dice **Chenare**")
+st.header("🎲 **Chenare**")
 
-for i in range(1, 6):
+# Funcție pentru a evita repetiția
+# Această funcție generează UI-ul pentru un singur chenar.
+def afiseaza_chenar(i):
     key = f'variante_{i}'
-    with st.container():
+    
+    with st.container(border=True): # Am adăugat 'border=True' pentru separare vizuală
         with st.form(f"form_{key}"):
             st.subheader(f"Chenar {i}")
             text_var = st.text_area(
-                "Ex: 1, 6 7 5 77  sau  1 6 7 5 77",
+                "Lipește variantele aici. Un rând per variantă. Ex: `ID, 1 2 3 4 5 6`",
                 height=100,
-                placeholder="1, 6 7 5 77\n2 4 65 45 23",
+                placeholder="V1, 6 7 5 77 8 9\nV2 4 65 45 23 11 12",
                 key=f"input_var_{i}"
             )
             c1, c2 = st.columns(2)
             with c1:
-                if st.form_submit_button("Adaugă", type="primary"):
+                if st.form_submit_button("✅ Adaugă", type="primary"):
                     noi = parse_variante(text_var, f'C{i}')
-                    st.session_state[key].extend(noi)
-                    st.success(f"Adăugate {len(noi)} variante")
+                    
+                    # Evită duplicatele (bazat pe ID)
+                    ids_existenti = {v['id'] for v in st.session_state[key]}
+                    variante_noi_filtrate = [v for v in noi if v['id'] not in ids_existenti]
+                    
+                    st.session_state[key].extend(variante_noi_filtrate)
+                    st.success(f"Adăugate {len(variante_noi_filtrate)} variante unice în Chenarul {i}.")
+                    st.session_state[f"input_var_{i}"] = "" # Golește text area
                     st.rerun()
             with c2:
-                if st.form_submit_button("Șterge"):
+                if st.form_submit_button("❌ Șterge"):
                     st.session_state[key] = []
+                    st.success(f"Variantele din Chenarul {i} au fost șterse.")
                     st.rerun()
 
-    with st.expander(f"Afișează variantele din Chenar {i}"):
-        if st.session_state[key]:
-            df = pd.DataFrame([{"ID": v['id'], "Numere": " ".join(map(str, v['numere']))} for v in st.session_state[key]])
-            paginare(df, f"var{i}")
-        else:
-            st.info("Nicio variantă.")
+        # Afișează expanderul în afara form-ului
+        with st.expander(f"Afișează variantele din Chenar {i} ({len(st.session_state[key])} în total)"):
+            if st.session_state[key]:
+                df = pd.DataFrame([
+                    {"ID": v['id'], "Numere": " ".join(map(str, v['numere']))} 
+                    for v in st.session_state[key]
+                ])
+                paginare(df, f"var{i}")
+            else:
+                st.info("Nicio variantă.")
+
+# Buclă care înlocuiește codul repetat
+for i in range(1, 6):
+    afiseaza_chenar(i)
 
 # ================= TOATE VARIANTELE =================
 toate_variantele = sum((st.session_state[f'variante_{i}'] for i in range(1,6)), [])
 
-# ================= ANALIZĂ =================
-if st.session_state.runde and toate_variantele:
-    min_match = st.slider("Câștig minim:", 2, 6, 4)
+st.divider()
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Top 1150", "Acoperire", "Consistente", "Sugestii"])
+# ================= ANALIZĂ =================
+st.header("🧠 **Analiză AI**")
+
+if st.session_state.runde and toate_variantele:
+    min_match = st.slider("Număr minim de potriviri pentru un „câștig”:", 2, 6, 4,
+                          help="Stabilește câte numere trebuie să se potrivească pentru ca o variantă să fie considerată câștigătoare într-o rundă.")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["🏆 Top 1150 Scor AI", "🎯 Acoperire Minimă", "📊 Consistență", "💡 Sugestii"])
 
     with tab1:
-        if st.button("Calculează TOP 1150"):
-            with st.spinner("Se calculează..."):
-                scoruri = calculeaza_scoruri_ai(toate_variantele, st.session_state.runde, min_match)
-                top = sorted(scoruri, key=lambda x: x['scor_ai'], reverse=True)[:1150]
-                st.session_state.top1150 = top
+        st.subheader("Top 1150 Variante (bazat pe Scor AI)")
+        if st.button("Calculează TOP 1150", type="primary"):
+            # Funcția calculează și sortează
+            scoruri_sortate = calculeaza_scoruri_ai(toate_variantele, st.session_state.runde, min_match)
+            st.session_state.top1150 = scoruri_sortate[:1150] # Salvează doar top 1150
+
         if 'top1150' in st.session_state:
-            df = pd.DataFrame([{
+            top_df = pd.DataFrame([{
                 "Poz": i+1, "Chenar": v['chenar'], "ID": v['id'],
-                "Numere": " ".join(map(str, v['numere'])), "Scor AI": v['scor_ai']
+                "Numere": " ".join(map(str, v['numere'])), 
+                "Scor AI": v['scor_ai'],
+                "Câștiguri": v['castiguri']
             } for i, v in enumerate(st.session_state.top1150)])
-            st.dataframe(df.head(20))
-            with st.expander("Toate 1150"):
-                st.dataframe(df)
-            txt = "\n".join([f"{v['id']}, {' '.join(map(str, v['numere']))}" for v in st.session_state.top1150])
-            st.download_button("Descarcă", txt, "top.txt", "text/plain")
+            
+            st.info("Top 20 de variante cu cel mai bun scor AI:")
+            st.dataframe(top_df.head(20), use_container_width=True)
+            
+            with st.expander("Afișează toate cele 1150 de variante"):
+                st.dataframe(top_df, use_container_width=True, height=500)
+                
+            txt_export = "\n".join([
+                f"{v['ID']}, {' '.join(v['Numere'].split())}" 
+                for _, v in top_df.iterrows()
+            ])
+            st.download_button("📥 Descarcă Top 1150 (txt)", txt_export, "top1150.txt", "text/plain")
+        else:
+            st.info("Apasă pe buton pentru a calcula Top 1150.")
 
     with tab2:
-        if st.button("Acoperire minimă"):
+        st.subheader("Acoperire Minimă")
+        st.write("Găsește cel mai mic set de variante care ar fi „câștigat” (cu `min_match` potriviri) în toate rundele câștigătoare din istoric.")
+        
+        if st.button("Calculează Acoperirea", type="primary"):
             ac = acoperire_minima(toate_variantele, st.session_state.runde, min_match)
             st.session_state.acoperire = ac
+            
         if 'acoperire' in st.session_state:
-            st.write(f"**{len(st.session_state.acoperire)} variante acoperă toate câștigurile!**")
-            df = pd.DataFrame([{"ID": v['id'], "Numere": " ".join(map(str, v['numere']))} for v in st.session_state.acoperire])
-            st.dataframe(df)
+            acoperire_data = st.session_state.acoperire
+            st.success(f"**{len(acoperire_data)} variante** sunt necesare pentru a acoperi toate rundele câștigătoare din istoric.")
+            if acoperire_data:
+                df_acoperire = pd.DataFrame([
+                    {"Chenar": v['chenar'], "ID": v['id'], "Numere": " ".join(map(str, v['numere']))} 
+                    for v in acoperire_data
+                ])
+                st.dataframe(df_acoperire, use_container_width=True)
+            else:
+                st.warning("Nicio variantă nu a îndeplinit criteriul de câștig minim în rundele furnizate.")
+        else:
+            st.info("Apasă pe buton pentru a calcula acoperirea minimă.")
 
     with tab3:
-        cons = sorted(toate_variantele, key=lambda v: sum(1 for r in st.session_state.runde if potriviri(v['numere'], r) >= min_match) / len(st.session_state.runde), reverse=True)[:10]
-        df = pd.DataFrame([{
-            "ID": v['id'], "Numere": " ".join(map(str, v['numere'])),
-            "Frecvență": f"{sum(1 for r in st.session_state.runde if potriviri(v['numere'], r) >= min_match) / len(st.session_state.runde):.1%}"
-        } for v in cons])
-        st.dataframe(df)
+        st.subheader("Top 10 Cele Mai Consistente Variante")
+        st.write("Variantele care au avut cea mai mare frecvență de câștiguri (cu `min_match` potriviri) de-a lungul timpului.")
+        
+        # Folosim funcția cache-uită
+        consistente = calculeaza_consistenta(toate_variantele, st.session_state.runde, min_match)
+        
+        if consistente:
+            df_cons = pd.DataFrame([{
+                "Chenar": v['chenar'], "ID": v['id'], "Numere": " ".join(map(str, v['numere'])),
+                "Frecvență": v['frecventa']
+            } for v in consistente[:10]]) # Luăm doar top 10
+            
+            st.dataframe(
+                df_cons, 
+                use_container_width=True,
+                column_config={"Frecvență": st.column_config.ProgressColumn("Frecvență", format="%.1f%%", min_value=0, max_value=max(0.01, df_cons['Frecvență'].max()))}
+            )
+        else:
+            st.info("Nu s-au putut calcula date de consistență.")
 
     with tab4:
-        recente = st.session_state.runde[-50:] if len(st.session_state.runde) > 50 else st.session_state.runde
-        hot = [x[0] for x in Counter([n for r in recente for n in r]).most_common(18)]
-        st.write("**Numere fierbinți:**", ", ".join(map(str, hot)))
-        for i in range(5):
-            sug = sorted(random.sample(hot, 6))
-            st.write(f"**Sugestie {i+1}:** `{' , '.join(map(str, sug))}`")
+        st.subheader("Sugestii Bazate pe Numere Fierbinți")
+        
+        # Luăm ultimele 50 de runde sau toate, dacă sunt mai puține
+        runde_recente = st.session_state.runde[-50:]
+        if runde_recente:
+            # Numără toate numerele din rundele recente
+            numere = [n for r in runde_recente for n in r]
+            contor_numere = Counter(numere)
+            
+            # Selectează cele mai comune 18 numere
+            hot = [x[0] for x in contor_numere.most_common(18)]
+            
+            st.write(f"**Cele mai 'fierbinți' 18 numere din ultimele {len(runde_recente)} runde:**")
+            st.info(", ".join(map(str, sorted(hot))))
+            
+            st.write("**Sugestii (combinații aleatorii de 6 numere 'fierbinți'):**")
+            if len(hot) >= 6:
+                for i in range(5):
+                    sugestie = sorted(random.sample(hot, 6))
+                    st.code(f"Sugestia {i+1}:  {'  '.join(map(str, sugestie))}")
+            else:
+                st.warning("Nu există suficiente numere 'fierbinți' (minim 6) pentru a genera sugestii.")
+        else:
+            st.warning("Nu există runde pentru a calcula numere fierbinți.")
 
 else:
-    st.info("Adaugă runde și variante.")
+    st.warning("Te rog adaugă cel puțin o rundă și o variantă pentru a începe analiza.")
 
 # ================= SIDEBAR =================
-with st.sidebar:
-    if st.button("Salvează backup"):
-        data = {k: v for k, v in st.session_state.items() if k.startswith('variante_') or k == 'runde'}
-        b64 = base64.b64encode(json.dumps(data).encode()).decode()
-        st.download_button("backup.json", b64, "lottery.json", "application/json")
-    uploaded = st.file_uploader("Restore", type="json")
-    if uploaded:
-        st.session_state.update(json.load(uploaded))
-        st.rerun()
+# Secțiunea de Backup & Restore a fost eliminată conform solicitării.
