@@ -37,12 +37,9 @@ def parse_runde(text):
         
         nums = [int(x) for x in linie.replace(',', ' ').split() if x.isdigit()]
         
-        # =============== MODIFICARE: FĂRĂ RESTRICȚII ===============
-        # Orice linie cu cel puțin un număr este validă
+        # FĂRĂ RESTRICȚII: Orice linie cu cel puțin un număr este validă
         if len(nums) > 0:
-            # Salvăm TOATE numerele găsite
-            runde.append(tuple(sorted(nums)))
-        # =========================================================
+            runde.append(tuple(sorted(nums))) # Salvăm TOATE numerele găsite
             
     return runde
 
@@ -59,21 +56,17 @@ def parse_variante(text, chenar):
             id_var = parts[0]
             nums = [int(x) for x in parts[1:] if x.isdigit()]
             
-            # =============== MODIFICARE: FĂRĂ RESTRICȚII ===============
-            # Dacă nu găsim numere după ID, încercăm să vedem dacă
-            # întreaga linie e formată din numere (și ID-ul e primul număr)
+            # FĂRĂ RESTRICȚII: Încercăm să ghicim formatul
             if not nums and all(p.isdigit() for p in parts):
-                 id_var = parts[0] # Primul număr devine ID
+                 id_var = parts[0] 
                  nums = [int(x) for x in parts[1:] if x.isdigit()]
 
-            # Dacă tot nu avem numere, poate e formatul "V1 1 2 3"
             if not nums and not parts[0].isdigit():
                  id_var = parts[0]
                  nums = [int(x) for x in parts[1:] if x.isdigit()]
             
-            # Dacă formatul este "1 2 3 4 5" (fără ID)
             if not nums and all(p.isdigit() for p in parts):
-                 id_var = f"AutoID_{len(variante)+1}" # Generăm un ID
+                 id_var = f"AutoID_{len(variante)+1}"
                  nums = [int(x) for x in parts if x.isdigit()]
 
             # Singura regulă: să existe cel puțin un număr
@@ -83,10 +76,8 @@ def parse_variante(text, chenar):
                     'numere': tuple(sorted(nums)), # Salvăm TOATE numerele
                     'chenar': chenar
                 })
-            # =========================================================
             
         except (ValueError, IndexError):
-            # Ignoră silențios orice linie cu format ciudat
             continue
     return variante
 
@@ -213,7 +204,6 @@ def paginare(df, key, page_size=50, height=300):
 
 # ================= UI: RUNDE =================
 st.header("📋 **Runde (Extrageri)**")
-# st.info("Formatul așteptat pentru runde este de 6 numere (ex: `1 2 3 4 5 6`).") # Eliminat
 with st.form("form_runde"):
     text_runde = st.text_area(
         "Lipește rundele aici. Un rând per rundă. Numere separate prin spațiu sau virgulă.",
@@ -299,10 +289,8 @@ st.header("🧠 **Analiză AI**")
 
 if st.session_state.runde and toate_variantele:
     
-    # =============== MODIFICARE: SLIDER FLEXIBIL ===============
     min_match = st.slider("Număr minim de potriviri pentru un „câștig”:", 1, 10, 3,
                           help="Stabilește câte numere trebuie să se potrivească pentru ca o variantă să fie considerată câștigătoare într-o rundă.")
-    # =========================================================
 
     tab1, tab2, tab3, tab4 = st.tabs(["🏆 Top 1150 Scor AI", "🎯 Acoperire Minimă", "📊 Consistență", "💡 Sugestii"])
 
@@ -389,15 +377,52 @@ if st.session_state.runde and toate_variantele:
             st.write(f"**Cele mai 'fierbinți' 18 numere din ultimele {len(runde_recente)} runde:**")
             st.info(", ".join(map(str, sorted(hot))))
             
-            # =============== MODIFICARE: SLIDER SUGESTII ===============
             num_sugestie = st.slider("Numere per sugestie:", 3, 10, 6)
             st.write(f"**Sugestii (combinații aleatorii de {num_sugestie} numere 'fierbinți'):**")
-            # ===========================================================
 
             if len(hot) >= num_sugestie:
-                for i in range(5):
-                    sugestie = sorted(random.sample(hot, num_sugestie))
-                    st.code(f"Sugestia {i+1}:  {'  '.join(map(str, sugestie))}")
+                # =============== MODIFICARE: FĂRĂ DUPLICATE ===============
+                sugestii_generate = set()
+                numar_sugestii_dorite = 5
+                
+                # Funcție locală pentru a calcula combinațiile
+                def combinations(n, k):
+                    if k < 0 or k > n:
+                        return 0
+                    if k == 0 or k == n:
+                        return 1
+                    if k > n // 2:
+                        k = n - k
+                    
+                    res = 1
+                    for i in range(k):
+                        res = res * (n - i) // (i + 1)
+                    return res
+
+                max_combinatii = combinations(len(hot), num_sugestie)
+                numar_sugestii_de_generat = min(numar_sugestii_dorite, max_combinatii)
+                
+                if numar_sugestii_de_generat < numar_sugestii_dorite and max_combinatii > 0:
+                    st.warning(f"Se pot genera doar {numar_sugestii_de_generat} sugestii unice din numerele disponibile.")
+
+                # Siguranță pentru a evita o buclă infinită
+                incercari = 0
+                max_incercari = numar_sugestii_de_generat * 50 + 50 # 50 încercări per sugestie + 50 extra
+                
+                while len(sugestii_generate) < numar_sugestii_de_generat and incercari < max_incercari:
+                    sugestie_lista = sorted(random.sample(hot, num_sugestie))
+                    sugestie_tuplu = tuple(sugestie_lista) # Tuplu e hashabil
+                    
+                    # Salvăm mărimea setului înainte de a adăuga
+                    marime_inainte = len(sugestii_generate)
+                    sugestii_generate.add(sugestie_tuplu)
+                    
+                    # Dacă mărimea s-a schimbat, afișăm sugestia nouă
+                    if len(sugestii_generate) > marime_inainte:
+                        st.code(f"Sugestia {len(sugestii_generate)}:  {'  '.join(map(str, sugestie_lista))}")
+                    
+                    incercari += 1
+                # ===========================================================
             else:
                 st.warning(f"Nu există suficiente numere 'fierbinți' (minim {num_sugestie}) pentru a genera sugestii.")
         else:
