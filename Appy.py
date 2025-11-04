@@ -5,7 +5,7 @@ import numpy as np
 from collections import defaultdict, Counter
 from itertools import combinations
 import random
-import io # Adăugat pentru a citi conținutul fișierului
+import io # Esențial pentru a citi conținutul fișierului ca text
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -14,21 +14,24 @@ import io # Adăugat pentru a citi conținutul fișierului
 def read_rounds_from_content(file_content):
     """Citește rundele din conținutul fișierului încărcat"""
     rounds = []
+    
+    # Verifică dacă s-a primit conținut
+    if not file_content or not isinstance(file_content, str):
+        return []
+        
     # Folosim io.StringIO pentru a trata conținutul ca pe un fișier
     file_like_object = io.StringIO(file_content)
     
     for line in file_like_object:
         line = line.strip()
         if line:
-            # Asigură-te că citirea se face corect, chiar dacă există spații
             try:
+                # Citim numere întregi separate prin virgulă
                 nums = [int(x.strip()) for x in line.split(',')]
-                # Verificăm dacă sunt 4 numere (sau numărul așteptat)
+                # Presupunem că o rundă validă are 4 numere
                 if len(nums) == 4:
                     rounds.append(set(nums))
-                else:
-                    # Poți adăuga un avertisment dacă o linie nu are 4 numere
-                    pass
+                # else: Ignorăm liniile cu alt număr de elemente
             except ValueError:
                 # Ignoră liniile care nu sunt numere întregi
                 pass
@@ -63,9 +66,12 @@ def calc_metrics(nums, rounds):
         return None
     
     # Calculul scorului și al metricilor
-    stability = 1 / (1 + np.std(matches)) if matches else 0
-    consistency = sum(1 for m in matches if m >= 2) / len(matches) if matches else 0
-    avg_coverage = np.mean(matches) if matches else 0
+    if not matches:
+        return None
+        
+    stability = 1 / (1 + np.std(matches))
+    consistency = sum(1 for m in matches if m >= 2) / len(matches)
+    avg_coverage = np.mean(matches)
     
     score = (
         c4 * 150 +
@@ -76,7 +82,7 @@ def calc_metrics(nums, rounds):
     )
     
     return {
-        'score': score, # Score-ul este calculat direct aici
+        'score': score,
         'count_4_4': c4,
         'count_3_3': c3,
         'count_2_2': c2,
@@ -98,14 +104,10 @@ def create_non_overlapping_blocks():
     ]
     return blocks
 
-def generate_hybrid_variants_optimized(blocks, rounds, sample_size=200000):
+def generate_hybrid_variants_optimized(blocks, rounds, sample_size=250000):
     """Generare optimizată cu garantare non-overlap"""
     
-    # Extragem numerele pe blocuri
-    block_nums = []
-    for min_n, max_n, name in blocks:
-        nums = list(range(min_n, max_n + 1))
-        block_nums.append(nums)
+    block_nums = [list(range(min_n, max_n + 1)) for min_n, max_n, name in blocks]
     
     variants = []
     generated = set()
@@ -114,7 +116,6 @@ def generate_hybrid_variants_optimized(blocks, rounds, sample_size=200000):
     phase1_size = int(sample_size * 0.7)
     
     for i in range(phase1_size):
-        # Alegem 1 număr din fiecare bloc
         nums = tuple(sorted([random.choice(b) for b in block_nums]))
         
         if nums in generated:
@@ -127,33 +128,27 @@ def generate_hybrid_variants_optimized(blocks, rounds, sample_size=200000):
             variants.append((f"H{i}", nums, m))
     
     # Strategie 2: Targeted generation (30%)
-    
-    # Identificăm cele mai performante numere per bloc
-    # NOTE: Această secțiune calculează performanța numerelor bazat pe potrivirile Rundelor (r) 
-    # NU pe potrivirile variantelor generate (v). Este o metodă OK de estimare.
     num_performance = defaultdict(lambda: {'4': 0, '3': 0})
     
     for r in rounds:
         for n in r:
             for bi, (min_n, max_n, _) in enumerate(blocks):
                 if min_n <= n <= max_n:
-                    # Numărul de potriviri 4/4 și 3/3 în care a fost implicată RUNDA respectivă
+                    # Folosim set(r) & rr pentru potriviri între runde, nu între varianta și rundă
                     num_performance[n]['4'] += sum(1 for rr in rounds if len(set(r) & rr) == 4)
                     num_performance[n]['3'] += sum(1 for rr in rounds if len(set(r) & rr) == 3)
                     break
     
-    # Top numere per bloc
     top_per_block = []
     for bi, nums in enumerate(block_nums):
         scored = [(n, num_performance[n]['4'] * 2 + num_performance[n]['3']) for n in nums]
         scored.sort(key=lambda x: x[1], reverse=True)
-        top_per_block.append([n for n, _ in scored[:len(nums)//2]])  # Top 50%
+        top_per_block.append([n for n, _ in scored[:len(nums)//2]])
     
     phase2_size = sample_size - phase1_size
     phase2_generated = 0
     
     while phase2_generated < phase2_size and len(variants) < sample_size:
-        # Combinație din top numere
         nums = tuple(sorted([random.choice(top_per_block[bi]) for bi in range(4)]))
         
         if nums in generated:
@@ -175,13 +170,10 @@ def select_best_variants_greedy(variants, rounds, target_count=1150):
     if len(variants) <= target_count:
         return variants
     
-    # Sortare inițială
     variants.sort(key=lambda x: x[2]['score'], reverse=True)
     
     selected = []
     used = set()
-    
-    # Tracking
     round_3_3_count = defaultdict(int)
     round_4_4_count = defaultdict(int)
     num_usage = defaultdict(int)
@@ -198,12 +190,9 @@ def select_best_variants_greedy(variants, rounds, target_count=1150):
             selected.append((idx, nums, m))
             used.add(key)
             
-            for ri in m['rounds_3_3']:
-                round_3_3_count[ri] += 1
-            for ri in m['rounds_4_4']:
-                round_4_4_count[ri] += 1
-            for n in nums:
-                num_usage[n] += 1
+            for ri in m['rounds_3_3']: round_3_3_count[ri] += 1
+            for ri in m['rounds_4_4']: round_4_4_count[ri] += 1
+            for n in nums: num_usage[n] += 1
     
     # FAZA 2: Optimizare acoperire
     remaining = [v for v in variants if tuple(sorted(v[1])) not in used]
@@ -213,7 +202,6 @@ def select_best_variants_greedy(variants, rounds, target_count=1150):
         best_score = -1
         best_idx = -1
         
-        # Evaluăm mai mulți candidați pentru diversitate
         eval_size = min(5000, len(remaining))
         candidates = remaining[:eval_size]
         
@@ -243,79 +231,28 @@ def select_best_variants_greedy(variants, rounds, target_count=1150):
                 best_idx = i
         
         if best_idx == -1:
-            # Nu mai există candidați viabili
             break
         
-        # Adăugăm best
         idx, nums, m = candidates[best_idx]
         key = tuple(sorted(nums))
         
         selected.append((idx, nums, m))
         used.add(key)
         
-        for ri in m['rounds_3_3']:
-            round_3_3_count[ri] += 1
-        for ri in m['rounds_4_4']:
-            round_4_4_count[ri] += 1
-        for n in nums:
-            num_usage[n] += 1
+        for ri in m['rounds_3_3']: round_3_3_count[ri] += 1
+        for ri in m['rounds_4_4']: round_4_4_count[ri] += 1
+        for n in nums: num_usage[n] += 1
         
-        # Eliminăm varianta selectată din lista de candidați
         remaining.pop(best_idx)
     
     return selected
 
-# ============================================================================
-# MAIN
-# ============================================================================
-
-def main(file_content):
-    
-    # 1. Definirea blocurilor
-    blocks = create_non_overlapping_blocks()
-    
-    # 2. Citirea rundelor
-    rounds = read_rounds_from_content(file_content)
-    
-    if not rounds:
-        return "❌ Nu s-au putut citi runde valide din fișierul furnizat. Vă rugăm să verificați formatul (4 numere întregi pe linie, separate prin virgulă, ex: 1,16,30,43)."
-    
-    print("="*70)
-    print("🚀 GENERATOR VARIANTE HIBRIDE OPTIMIZAT")
-    print("="*70)
-    print(f"📊 Runde istorice încărcate: {len(rounds):,}")
-    
-    # 3. Generare
-    SAMPLE_SIZE = 250000
-    print(f"🔄 Generare a {SAMPLE_SIZE:,} de variante hibride (1 număr/bloc)...")
-    variants = generate_hybrid_variants_optimized(blocks, rounds, SAMPLE_SIZE)
-    
-    if not variants:
-        return "\n❌ Nicio variantă validă! (Nicio combinație hibridă nu a atins măcar un 4/4 în istoric)"
-    
-    print(f"  ✓ Variante valide generate (cu cel puțin un 4/4): {len(variants):,}")
-    
-    # 4. Selecție
-    TARGET_COUNT = 1150
-    print(f"\n🎯 Selecție Greedy de {TARGET_COUNT} variante pentru maximizarea acoperirii...")
-    selected = select_best_variants_greedy(variants, rounds, TARGET_COUNT)
-    
-    print(f"  ✓ Total variante selectate: {len(selected)}/{TARGET_COUNT}")
-    
-    # 5. Output (Formare String pentru afișare/descărcare)
-    output_lines = []
-    for i, (idx, nums, m) in enumerate(selected, 1):
-        output_lines.append(f"{i},{' '.join(str(n) for n in nums)}")
-    
-    output_content = "\n".join(output_lines)
-    
-    # 6. STATISTICI
-    # ... (Codul de statistici a rămas neschimbat, dar va rula în background)
+def format_statistics(selected, rounds, blocks):
+    """Calculează și formatează statisticile finale"""
     
     total_4 = sum(m['count_4_4'] for _, _, m in selected)
     total_3 = sum(m['count_3_3'] for _, _, m in selected)
     
-    # Formarea unui raport statistic concis
     report = [
         f"\n{'='*70}",
         "📈 STATISTICI FINALE",
@@ -323,7 +260,7 @@ def main(file_content):
         f"🎯 Potriviri totale generate de cele {len(selected)} variante:",
         f"  4/4: {total_4:,} ({total_4/len(selected):.2f} pe variantă)",
         f"  3/3: {total_3:,} ⭐ ({total_3/len(selected):.1f} pe variantă)",
-        "\n🌈 Verificare Hibrid:",
+        "\n🌈 Verificare Hibrid (Procent de utilizare al numerelor din blocuri):",
     ]
 
     # Acoperire
@@ -336,7 +273,7 @@ def main(file_content):
     for min_n, max_n, name in blocks:
         count = sum(1 for n in all_nums if min_n <= n <= max_n)
         expected = len(selected)
-        report.append(f"  Bloc {name:8s}: {count/expected*100:.1f}% utilizare")
+        report.append(f"  Bloc {name:8s}: {count/expected*100:.1f}%")
 
     report.append(f"\n🎨 Diversitate:")
     top_nums = num_counts.most_common(5)
@@ -353,12 +290,60 @@ def main(file_content):
                 break
     report.append(f"  {' '.join(blocks_str)}")
     report.append(f"  4/4={m['count_4_4']} | 3/3={m['count_3_3']} | 2/2={m['count_2_2']}")
-    
-    final_output = "\n".join(report)
-    
-    return final_output, output_content
 
-if __name__ == '__main__':
-    # Această secțiune este doar un placeholder. 
-    # În mediul de execuție real, conținutul fișierului trebuie transmis funcției main.
-    print("Vă rugăm să folosiți funcționalitatea de atașare a fișierelor pentru a rula acest cod.")
+    return "\n".join(report)
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+def main(file_content):
+    """Funcția principală, acceptă conținutul fișierului ca argument"""
+    
+    # 1. Definirea blocurilor
+    blocks = create_non_overlapping_blocks()
+    
+    # 2. Citirea rundelor
+    rounds = read_rounds_from_content(file_content)
+    
+    if not rounds:
+        return "❌ Nu s-au putut citi runde valide din conținutul furnizat. Vă rugăm să verificați formatul (4 numere întregi pe linie, separate prin virgulă, ex: 1,16,30,43)."
+    
+    # Afișare log
+    print("="*70)
+    print("🚀 GENERATOR VARIANTE HIBRIDE OPTIMIZAT")
+    print("="*70)
+    print(f"📊 Runde istorice citite: {len(rounds):,}")
+    
+    # 3. Generare
+    SAMPLE_SIZE = 250000
+    print(f"🔄 Generare a {SAMPLE_SIZE:,} de variante hibride (1 număr/bloc)...")
+    variants = generate_hybrid_variants_optimized(blocks, rounds, SAMPLE_SIZE)
+    
+    if not variants:
+        return "\n❌ Nicio variantă validă! Nicio combinație hibridă din eșantion nu a atins măcar un 4/4 în istoric."
+    
+    print(f"  ✓ Variante valide generate (cu cel puțin un 4/4): {len(variants):,}")
+    
+    # 4. Selecție
+    TARGET_COUNT = 1150
+    print(f"\n🎯 Selecție Greedy de {TARGET_COUNT} variante pentru maximizarea acoperirii...")
+    selected = select_best_variants_greedy(variants, rounds, TARGET_COUNT)
+    
+    print(f"  ✓ Total variante selectate: {len(selected)}/{TARGET_COUNT}")
+    
+    # 5. Output și Statistică
+    
+    # Formează lista de variante pentru salvare/copiere
+    output_lines = []
+    for i, (idx, nums, m) in enumerate(selected, 1):
+        # Format: Index, N1 N2 N3 N4
+        output_lines.append(f"{i},{' '.join(str(n) for n in nums)}")
+    output_content = "\n".join(output_lines)
+    
+    # Generează raportul statistic
+    stats_report = format_statistics(selected, rounds, blocks)
+    
+    final_output = stats_report + "\n\n" + "="*70 + "\n✅ COMPLET!" + "\n" + "="*70
+
+    return final_output, output_content
