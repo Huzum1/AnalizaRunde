@@ -124,6 +124,8 @@ def calculeaza_scoruri_ai(_variante, _runde, min_match):
 # ================= ACOPERIRE MINIMĂ =================
 @st.cache_data(show_spinner="Se calculează acoperirea minimă...")
 def acoperire_minima(_variante, _runde, min_match):
+    # _variante AICI ESTE LISTA BRUTĂ, CU DUPLICATE (așa cum trebuie)
+    
     runde_castig = {i for i, r in enumerate(_runde) 
                     if any(potriviri(v['numere'], r) >= min_match for v in _variante)}
     
@@ -131,16 +133,30 @@ def acoperire_minima(_variante, _runde, min_match):
     acoperite = set()
     selectate = []
     
+    # Asigurăm ID-uri unice pentru dicționare, chiar dacă numerele se repetă
+    variante_cu_id_unic = []
+    id_uri_vazute = set()
+    for idx, v in enumerate(_variante):
+        # Creăm un ID intern unic în caz de coliziuni
+        id_intern = f"{v['id']}_{idx}" 
+        if v['id'] not in id_uri_vazute:
+             id_intern = v['id']
+             id_uri_vazute.add(v['id'])
+        
+        variante_cu_id_unic.append({**v, 'id_intern': id_intern})
+
+    
     var_acopera = {
-        v['id']: {i for i in runde_castig if potriviri(v['numere'], _runde[i]) >= min_match}
-        for v in _variante
+        v['id_intern']: {i for i in runde_castig if potriviri(v['numere'], _runde[i]) >= min_match}
+        for v in variante_cu_id_unic
     }
     
-    ramase = {v['id']: var_acopera[v['id']] for v in _variante if var_acopera[v['id']]}
-    variante_dict = {v['id']: v for v in _variante}
+    ramase = {v['id_intern']: var_acopera[v['id_intern']] for v in variante_cu_id_unic if var_acopera[v['id_intern']]}
+    variante_dict = {v['id_intern']: v for v in variante_cu_id_unic}
 
     while acoperite != runde_castig and ramase:
         best_id = max(ramase, key=lambda id_var: len(ramase[id_var] - acoperite))
+        
         runde_noi_acoperite = ramase[best_id] - acoperite
         
         if not runde_noi_acoperite:
@@ -155,6 +171,7 @@ def acoperire_minima(_variante, _runde, min_match):
 # ================= CONSISTENȚĂ =================
 @st.cache_data(show_spinner="Se calculează consistența...")
 def calculeaza_consistenta(_variante, _runde, min_match):
+    # _variante AICI ESTE LISTA UNICĂ (per numere)
     if not _runde or not _variante: return []
     rez = []
     total_runde = len(_runde)
@@ -251,19 +268,13 @@ def afiseaza_chenar(i):
                 if st.form_submit_button("✅ Adaugă", type="primary"):
                     noi = parse_variante(text_var, f'C{i}')
                     
-                    # Obținem numerele deja existente în session_state
+                    # Logica de de-duplicare la import (bazată pe numere)
                     numere_existente = {v['numere'] for v in st.session_state[key]}
-                    
                     variante_noi_filtrate = []
                     
-                    # Iterăm prin variantele NOI parcurse
                     for v in noi:
-                        # Verificăm dacă numărul e deja în set
                         if v['numere'] not in numere_existente:
-                            # Dacă nu e, îl adăugăm la listă
                             variante_noi_filtrate.append(v)
-                            # și îl adăugăm *imediat* la set
-                            # pentru a bloca duplicatele *din același lot*
                             numere_existente.add(v['numere'])
                     
                     st.session_state[key].extend(variante_noi_filtrate)
@@ -288,23 +299,27 @@ def afiseaza_chenar(i):
 for i in range(1, 6):
     afiseaza_chenar(i)
 
-# ================= TOATE VARIANTELE =================
-# De-duplicare finală (între chenare)
-variante_brute = sum((st.session_state[f'variante_{i}'] for i in range(1,6)), [])
-numere_vazute = set()
-toate_variantele = []
-for v in variante_brute:
-    if v['numere'] not in numere_vazute:
-        toate_variantele.append(v)
-        numere_vazute.add(v['numere'])
-
 
 st.divider()
 
 # ================= ANALIZĂ =================
 st.header("🧠 **Analiză AI**")
 
-if st.session_state.runde and toate_variantele:
+# =============== SEPARARE LOGICĂ ===============
+# 1. Lista BRUTĂ (cu duplicate între chenare) - pentru Acoperire
+variante_brute = sum((st.session_state[f'variante_{i}'] for i in range(1,6)), [])
+
+# 2. Lista UNICĂ (curățată pe bază de numere) - pentru Top 1150 și Consistență
+numere_vazute = set()
+variante_unice_pt_scor = [] 
+for v in variante_brute:
+    if v['numere'] not in numere_vazute:
+        variante_unice_pt_scor.append(v)
+        numere_vazute.add(v['numere'])
+# ===============================================
+
+
+if st.session_state.runde and variante_brute:
     
     min_match = st.slider("Număr minim de potriviri pentru un „câștig”:", 1, 10, 3,
                           help="Stabilește câte numere trebuie să se potrivească pentru ca o variantă să fie considerată câștigătoare într-o rundă.")
@@ -314,7 +329,8 @@ if st.session_state.runde and toate_variantele:
     with tab1:
         st.subheader("Top 1150 Variante (bazat pe Scor AI)")
         if st.button("Calculează TOP 1150", type="primary"):
-            scoruri_sortate = calculeaza_scoruri_ai(toate_variantele, st.session_state.runde, min_match)
+            # Folosim lista UNICĂ
+            scoruri_sortate = calculeaza_scoruri_ai(variante_unice_pt_scor, st.session_state.runde, min_match)
             st.session_state.top1150 = scoruri_sortate[:1150]
 
         if 'top1150' in st.session_state:
@@ -325,10 +341,7 @@ if st.session_state.runde and toate_variantele:
                 "Câștiguri": v['castiguri']
             } for i, v in enumerate(st.session_state.top1150)])
             
-            # =============== CORECȚIA AICI ===============
-            # Linia asta provoca eroarea. Am închis corect f-string-ul.
-            st.info(f"Top 20 din {len(toate_variantele)} variante unice analizate:")
-            # ===============================================
+            st.info(f"Top 20 din {len(variante_unice_pt_scor)} variante unice analizate:")
             
             st.dataframe(top_df.head(20), use_container_width=True)
             
@@ -348,7 +361,8 @@ if st.session_state.runde and toate_variantele:
         st.write("Găsește cel mai mic set de variante care ar fi „câștigat” (cu `min_match` potriviri) în toate rundele câștigătoare din istoric.")
         
         if st.button("Calculează Acoperirea", type="primary"):
-            ac = acoperire_minima(toate_variantele, st.session_state.runde, min_match)
+            # Folosim lista BRUTĂ
+            ac = acoperire_minima(variante_brute, st.session_state.runde, min_match)
             st.session_state.acoperire = ac
             
         if 'acoperire' in st.session_state:
@@ -369,7 +383,8 @@ if st.session_state.runde and toate_variantele:
         st.subheader("Top 10 Cele Mai Consistente Variante")
         st.write("Variantele care au avut cea mai mare frecvență de câștiguri (cu `min_match` potriviri) de-a lungul timpului.")
         
-        consistente = calculeaza_consistenta(toate_variantele, st.session_state.runde, min_match)
+        # Folosim lista UNICĂ
+        consistente = calculeaza_consistenta(variante_unice_pt_scor, st.session_state.runde, min_match)
         
         if consistente:
             df_cons = pd.DataFrame([{
