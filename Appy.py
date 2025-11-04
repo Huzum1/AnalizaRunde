@@ -1,217 +1,422 @@
-import streamlit as st
-import pandas as pd
-from collections import Counter
-import json
-import base64
-import random
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import numpy as np
+from collections import defaultdict, Counter
 from itertools import combinations
+import random
 
-# ================= CONFIG =================
-st.set_page_config(page_title="Loterie AI", page_icon="crystal_ball", layout="wide")
-st.title("crystal_ball Loterie AI – Top 1150 Variante cu Potențial Viitor")
-st.divider()
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
-# ================= SESSION STATE =================
-for key in ['runde', 'variante_1', 'variante_2', 'variante_3', 'variante_4', 'variante_5']:
-    if key not in st.session_state:
-        st.session_state[key] = []
-for key in ['page_runde', 'page_var1', 'page_var2', 'page_var3', 'page_var4', 'page_var5']:
-    if key not in st.session_state:
-        st.session_state[key] = 1
+def read_rounds(filename):
+    """Citește rundele din fișier"""
+    rounds = []
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                nums = [int(x.strip()) for x in line.split(',')]
+                rounds.append(set(nums))
+    return rounds
 
-# ================= FUNCTII DE BAZĂ =================
-@st.cache_data(show_spinner=False)
-def parse_runde(text):
-    if not text.strip(): return []
-    runde = []
-    for linie in text.strip().split('\n'):
-        try:
-            nums = [int(n.strip()) for n in linie.split(',') if n.strip().isdigit()]
-            if nums: runde.append(tuple(sorted(nums)))
-        except: continue
-    return runde
-
-@st.cache_data(show_spinner=False)
-def parse_variante(text, chenar):
-    if not text.strip(): return []
-    variante = []
-    for linie in text.strip().split('\n'):
-        try:
-            parti = linie.split(',', 1)
-            if len(parti) < 2: continue
-            id_var = parti[0].strip()
-            nums = [int(n.strip()) for n in parti[1].split() if n.strip().isdigit()]
-            if nums: variante.append({'id': id_var, 'numere': tuple(sorted(nums)), 'chenar': chenar})
-        except: continue
-    return variante
-
-def potriviri(v, r): return len(set(v) & set(r))
-
-# ================= STRATEGII NOI =================
-
-# 1. Consistență pe ferestre
-def consistenta_varianta(varianta, runde, min_match, window=10):
-    if len(runde) < window: 
-        win_rate = sum(1 for r in runde if potriviri(varianta, r) >= min_match) / len(runde) if runde else 0
-        return win_rate, win_rate, len(runde)
+def calc_metrics(nums, rounds):
+    """Calculează metrici pentru o variantă"""
+    v_set = set(nums)
+    c4, c3, c2, c1 = 0, 0, 0, 0
+    matches = []
+    rounds_3_3 = []
+    rounds_4_4 = []
     
-    wins = []
-    for i in range(0, len(runde), window):
-        chunk = runde[i:i+window]
-        win = any(potriviri(varianta, r) >= min_match for r in chunk)
-        wins.append(1 if win else 0)
+    for ri, r in enumerate(rounds):
+        m = len(v_set & r)
+        matches.append(m)
+        
+        if m == 4:
+            c4 += 1
+            rounds_4_4.append(ri)
+        elif m == 3:
+            c3 += 1
+            rounds_3_3.append(ri)
+        elif m == 2:
+            c2 += 1
+        elif m == 1:
+            c1 += 1
     
-    mean = sum(wins) / len(wins)
-    variance = sum((x - mean)**2 for x in wins) / len(wins) if wins else 0
-    consistenta = 1 - (variance ** 0.5)
-    recent = sum(wins[-3:]) / min(3, len(wins)) if wins else 0
-    return consistenta, mean, recent
+    if c4 == 0:
+        return None
+    
+    return {
+        'score': 0,
+        'count_4_4': c4,
+        'count_3_3': c3,
+        'count_2_2': c2,
+        'count_1_1': c1,
+        'rounds_3_3': rounds_3_3,
+        'rounds_4_4': rounds_4_4,
+        'stability': 1 / (1 + np.std(matches)),
+        'avg_coverage': np.mean(matches),
+        'consistency': sum(1 for m in matches if m >= 2) / len(matches)
+    }
 
-# 2. Set Cover pentru acoperire minimă
-@st.cache_data(show_spinner=False)
-def acoperire_minima(variante, runde, min_match):
-    runde_castig = [i for i, r in enumerate(runde) if any(potriviri(v['numere'], r) >= min_match for v in variante)]
-    if not runde_castig: return []
+def create_non_overlapping_blocks():
+    """Creează blocuri NON-suprapuse pentru hibrid adevărat"""
+    blocks = [
+        (1, 16, "1-16"),      # 16 numere
+        (17, 29, "17-29"),    # 13 numere
+        (30, 42, "30-42"),    # 13 numere  
+        (43, 65, "43-65")     # 23 numere
+    ]
+    return blocks
+
+def generate_hybrid_variants_optimized(blocks, rounds, sample_size=200000):
+    """Generare optimizată cu garantare non-overlap"""
     
-    acoperite = set()
-    selectate = []
-    while len(acoperite) < len(runde_castig):
-        best = max(variante, key=lambda v: len(
-            {i for i in runde_castig if i not in acoperite and potriviri(v['numere'], runde[i]) >= min_match}
-        ), default=None)
-        if not best or not any(i not in acoperite and potriviri(best['numere'], runde[i]) >= min_match for i in runde_castig):
+    print(f"\n🔄 GENERARE VARIANTE HIBRIDE OPTIMIZATE")
+    print(f"   Garantare: 1 număr UNIC din fiecare bloc (fără overlap)")
+    print(f"   Sample size: {sample_size:,}")
+    
+    # Extragem numerele pe blocuri
+    block_nums = []
+    for min_n, max_n, name in blocks:
+        nums = list(range(min_n, max_n + 1))
+        block_nums.append(nums)
+        print(f"   Bloc {name}: {len(nums)} numere")
+    
+    total_possible = np.prod([len(b) for b in block_nums])
+    print(f"\n  🎯 Total combinații: {total_possible:,}")
+    
+    # Generare inteligentă
+    variants = []
+    generated = set()
+    
+    # Strategie 1: Random sampling (70%)
+    print(f"\n  📊 FAZA 1: Random sampling ({int(sample_size * 0.7):,} variante)")
+    phase1_size = int(sample_size * 0.7)
+    
+    for i in range(phase1_size):
+        if (i + 1) % 50000 == 0:
+            print(f"     Progress: {i+1:,}/{phase1_size:,} | Valide: {len(variants):,}")
+        
+        # Alegem 1 număr din fiecare bloc
+        nums = tuple(sorted([random.choice(b) for b in block_nums]))
+        
+        if nums in generated:
+            continue
+        
+        generated.add(nums)
+        m = calc_metrics(nums, rounds)
+        
+        if m:
+            score = (
+                m['count_4_4'] * 150 +
+                m['count_3_3'] * 60 +
+                m['count_2_2'] * 8 +
+                m['stability'] * 120 +
+                m['consistency'] * 60
+            )
+            m['score'] = score
+            variants.append((f"H{i}", nums, m))
+    
+    print(f"     ✓ Variante valide: {len(variants):,}")
+    
+    # Strategie 2: Targeted generation (30%)
+    print(f"\n  📊 FAZA 2: Generare țintită")
+    
+    # Identificăm cele mai performante numere per bloc
+    num_performance = defaultdict(lambda: {'4': 0, '3': 0, '2': 0})
+    
+    for r in rounds:
+        for n in r:
+            for bi, (min_n, max_n, _) in enumerate(blocks):
+                if min_n <= n <= max_n:
+                    num_performance[n]['4'] += sum(1 for rr in rounds if len(set(r) & rr) == 4)
+                    num_performance[n]['3'] += sum(1 for rr in rounds if len(set(r) & rr) == 3)
+                    break
+    
+    # Top numere per bloc
+    top_per_block = []
+    for bi, nums in enumerate(block_nums):
+        scored = [(n, num_performance[n]['4'] * 2 + num_performance[n]['3']) for n in nums]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        top_per_block.append([n for n, _ in scored[:len(nums)//2]])  # Top 50%
+    
+    phase2_size = sample_size - phase1_size
+    phase2_generated = 0
+    
+    while phase2_generated < phase2_size and len(variants) < sample_size:
+        # Combinație din top numere
+        nums = tuple(sorted([random.choice(top_per_block[bi]) for bi in range(4)]))
+        
+        if nums in generated:
+            continue
+        
+        generated.add(nums)
+        m = calc_metrics(nums, rounds)
+        
+        if m:
+            score = (
+                m['count_4_4'] * 150 +
+                m['count_3_3'] * 60 +
+                m['count_2_2'] * 8 +
+                m['stability'] * 120 +
+                m['consistency'] * 60
+            )
+            m['score'] = score
+            variants.append((f"H{len(variants)}", nums, m))
+        
+        phase2_generated += 1
+        
+        if phase2_generated % 20000 == 0:
+            print(f"     Progress: {phase2_generated:,}/{phase2_size:,} | Total valide: {len(variants):,}")
+    
+    print(f"     ✓ Total variante: {len(variants):,}")
+    
+    return variants
+
+def select_best_variants_greedy(variants, rounds, target_count=1150):
+    """Selecție greedy optimizată cu maximizare acoperire"""
+    
+    print(f"\n🎯 SELECȚIE GREEDY OPTIMIZATĂ")
+    print(f"   Target: {target_count} variante")
+    
+    if len(variants) <= target_count:
+        print(f"  ⚠️  Doar {len(variants)} variante disponibile - selectez toate")
+        return variants
+    
+    # Sortare inițială
+    variants.sort(key=lambda x: x[2]['score'], reverse=True)
+    
+    selected = []
+    used = set()
+    
+    # Tracking
+    round_3_3_count = defaultdict(int)
+    round_4_4_count = defaultdict(int)
+    num_usage = defaultdict(int)
+    
+    # FAZA 1: Elite top 20% (cei mai buni direct)
+    elite_count = int(target_count * 0.2)
+    print(f"\n  ⭐ FAZA 1: Elite top {elite_count}")
+    
+    for idx, nums, m in variants[:elite_count * 3]:  # Luăm din top 60% pentru diversitate
+        if len(selected) >= elite_count:
             break
-        selectate.append(best)
-        acoperite.update({i for i in runde_castig if potriviri(best['numere'], runde[i]) >= min_match})
-    return selectate
-
-# 3. Numere fierbinți
-def numere_fierbinti(runde, top_n=20, recent_weight=3):
-    toate = []
-    for i, r in enumerate(runde):
-        weight = recent_weight if i >= len(runde) - 20 else 1
-        toate.extend([n] * weight for n in r)
-    return [x[0] for x in Counter(toate).most_common(top_n)]
-
-# 4. Scor predictiv avansat
-def scor_predictiv(var, runde, min_match):
-    v = var['numere']
-    castiguri = sum(1 for r in runde if potriviri(v, r) >= min_match)
-    consistenta, frecventa, recent = consistenta_varianta(v, runde, min_match)
+        
+        key = tuple(sorted(nums))
+        if key not in used:
+            selected.append((idx, nums, m))
+            used.add(key)
+            
+            for ri in m['rounds_3_3']:
+                round_3_3_count[ri] += 1
+            for ri in m['rounds_4_4']:
+                round_4_4_count[ri] += 1
+            for n in nums:
+                num_usage[n] += 1
     
-    scor = 0
-    scor += castiguri * 8
-    scor += frecventa * 100
-    scor += consistenta * 50
-    scor += recent * 120
-    scor += len(set(v)) * 2
-    return round(scor, 2)
-
-# ================= UI: INPUT =================
-st.header("clipboard Runde")
-with st.form("form_runde"):
-    text_runde = st.text_area("1,2,3,4,5,6", height=100)
-    c1, c2 = st.columns(2)
-    if c1.form_submit_button("Adaugă", type="primary"):
-        st.session_state.runde.extend(parse_runde(text_runde))
-        st.rerun()
-    if c2.form_submit_button("Șterge"):
-        st.session_state.runde = []
-        st.rerun()
-
-with st.expander("Afișează runde"):
-    if st.session_state.runde:
-        df = pd.DataFrame(st.session_state.runde)
-        df.index = range(1, len(df)+1)
-        st.dataframe(df, height=200)
-
-st.divider()
-st.header("game_dice Chenare")
-
-for i in range(1, 6):
-    key = f'variante_{i}'
-    with st.expander(f"Chenar {i} – {len(st.session_state[key])} variante"):
-        with st.form(f"form_c{i}"):
-            text = st.text_area("1, 1 2 3 4 5 6", height=80, key=f"in_c{i}")
-            c1, c2 = st.columns(2)
-            if c1.form_submit_button("Adaugă", type="primary"):
-                st.session_state[key].extend(parse_variante(text, f'C{i}'))
-                st.rerun()
-            if c2.form_submit_button("Șterge"):
-                st.session_state[key] = []
-                st.rerun()
-
-toate_variantele = sum((st.session_state[f'variante_{i}'] for i in range(1,6)), [])
-
-# ================= ANALIZĂ STRATEGICĂ =================
-if st.session_state.runde and toate_variantele:
-    min_match = st.slider("Câștig minim", 2, 6, 4)
+    print(f"     ✓ {len(selected)} elite selectate")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Top 1150 (AI)", "Acoperire Minimă", "Consistente", "Sugestii Viitor"])
-
-    with tab1:
-        st.subheader("star Top 1150 Variante – Scor Predictiv")
-        with st.spinner("Calculare..."):
-            for v in toate_variantele:
-                v['scor_ai'] = scor_predictiv(v, st.session_state.runde, min_match)
-            top1150 = sorted(toate_variantele, key=lambda x: x['scor_ai'], reverse=True)[:1150]
+    # FAZA 2: Optimizare acoperire
+    print(f"\n  📊 FAZA 2: Optimizare acoperire")
+    
+    remaining = [v for v in variants if tuple(sorted(v[1])) not in used]
+    
+    iteration = 0
+    last_progress = 0
+    
+    while len(selected) < target_count and remaining:
+        iteration += 1
         
-        df_top = pd.DataFrame([{
-            "Poz": i+1,
-            "Chenar": v['chenar'],
-            "ID": v['id'],
-            "Numere": " ".join(map(str, v['numere'])),
-            "Scor AI": v['scor_ai'],
-            "Câștiguri": sum(1 for r in st.session_state.runde if potriviri(v['numere'], r) >= min_match)
-        } for i, v in enumerate(top1150)])
+        current_progress = len(selected)
+        if current_progress - last_progress >= 100:
+            avg_3 = sum(round_3_3_count.values()) / len(rounds) if round_3_3_count else 0
+            avg_4 = sum(round_4_4_count.values()) / len(rounds) if round_4_4_count else 0
+            print(f"     {len(selected)}/{target_count} | 3/3: {avg_3:.1f} | 4/4: {avg_4:.1f}")
+            last_progress = current_progress
         
-        st.dataframe(df_top.head(20), use_container_width=True, height=400)
-        with st.expander("Toate 1150"):
-            st.dataframe(df_top, height=500)
+        # Evaluare candidați
+        best_score = -1
+        best_idx = -1
         
-        txt = "\n".join([f"{v['id']}, {' '.join(map(str, v['numere']))}" for v in top1150])
-        st.download_button("Descarcă TOP 1150", txt, "top_1150_ai.txt", "text/plain")
-
-    with tab2:
-        st.subheader("shield Acoperire Minimă (Set Cover)")
-        acoperire = acoperire_minima(toate_variantele, st.session_state.runde, min_match)
-        st.write(f"**{len(acoperire)} variante acoperă toate câștigurile posibile**")
-        if acoperire:
-            df = pd.DataFrame([{
-                "Chenar": v['chenar'], "ID": v['id'], "Numere": " ".join(map(str, v['numere']))
-            } for v in acoperire])
-            st.dataframe(df, use_container_width=True)
-
-    with tab3:
-        st.subheader("chart_with_upwards_trend Cele Mai Consistente")
-        consistente = sorted(toate_variantele, key=lambda v: consistenta_varianta(v['numere'], st.session_state.runde, min_match)[0], reverse=True)[:10]
-        df = pd.DataFrame([{
-            "ID": v['id'], "Numere": " ".join(map(str, v['numere'])),
-            "Consistenta": f"{consistenta_varianta(v['numere'], st.session_state.runde, min_match)[0]:.3f}"
-        } for v in consistente])
-        st.dataframe(df)
-
-    with tab4:
-        st.subheader("fire Numere Fierbinți & Sugestii")
-        hot = numere_fierbinti(st.session_state.runde[-50:] if len(st.session_state.runde) > 50 else st.session_state.runde)
-        st.write("**Numere fierbinți:**", ", ".join(map(str, hot)))
+        # Evaluăm mai mulți candidați pentru diversitate
+        eval_size = min(5000, len(remaining))
+        candidates = remaining[:eval_size]
         
-        st.write("**5 sugestii pentru următoarea rundă:**")
-        for i in range(5):
-            sug = sorted(random.sample(hot, 6))
-            st.write(f"{i+1}. **{', '.join(map(str, sug))}**")
+        for i, (idx, nums, m) in enumerate(candidates):
+            score = 0
+            
+            # Penalizăm runde supraacoperite
+            for ri in m['rounds_3_3']:
+                cnt = round_3_3_count[ri]
+                if cnt < 25:
+                    score += (25 - cnt) * 150  # Bonus mare pentru sub-acoperire
+                elif cnt < 35:
+                    score += 50
+                else:
+                    score -= (cnt - 35) * 20  # Penalizare pentru supra-acoperire
+            
+            for ri in m['rounds_4_4']:
+                cnt = round_4_4_count[ri]
+                if cnt < 3:
+                    score += (3 - cnt) * 800
+                elif cnt < 6:
+                    score += 100
+                else:
+                    score -= (cnt - 6) * 50
+            
+            # Diversitate numere
+            diversity = sum(100 / (1 + num_usage[n]) for n in nums)
+            score += diversity
+            
+            # Metrici proprii
+            score += m['count_3_3'] * 10
+            score += m['count_4_4'] * 50
+            score += m['stability'] * 100
+            
+            if score > best_score:
+                best_score = score
+                best_idx = i
+        
+        if best_idx == -1:
+            break
+        
+        # Adăugăm best
+        idx, nums, m = candidates[best_idx]
+        key = tuple(sorted(nums))
+        
+        selected.append((idx, nums, m))
+        used.add(key)
+        
+        for ri in m['rounds_3_3']:
+            round_3_3_count[ri] += 1
+        for ri in m['rounds_4_4']:
+            round_4_4_count[ri] += 1
+        for n in nums:
+            num_usage[n] += 1
+        
+        remaining = [v for v in remaining if tuple(sorted(v[1])) != key]
+    
+    print(f"     ✓ Total: {len(selected)} variante")
+    
+    return selected
 
-else:
-    st.info("Adaugă runde și variante pentru analiză strategică.")
+# ============================================================================
+# MAIN
+# ============================================================================
 
-# ================= SIDEBAR: BACKUP =================
-with st.sidebar:
-    st.header("backup Backup")
-    if st.button("Salvează"):
-        data = {k: st.session_state[k] for k in st.session_state if k.startswith('variante_') or k == 'runde'}
-        b64 = base64.b64encode(json.dumps(data).encode()).decode()
-        st.download_button("backup.json", b64, "lottery_ai.json", "application/json")
-    uploaded = st.file_uploader("Restore", type="json")
-    if uploaded:
-        st.session_state.update(json.load(uploaded))
-        st.rerun()
+def main():
+    print("="*70)
+    print("🚀 GENERATOR VARIANTE HIBRIDE OPTIMIZAT")
+    print("="*70)
+    
+    # Blocuri non-suprapuse
+    blocks = create_non_overlapping_blocks()
+    
+    print("\n📋 BLOCURI NON-SUPRAPUSE:")
+    for i, (min_n, max_n, name) in enumerate(blocks, 1):
+        count = max_n - min_n + 1
+        print(f"  {i}. Bloc {name}: {count} numere")
+    
+    # Load rounds
+    rounds = read_rounds('/mnt/user-data/uploads/runde_loterie_doar_runde_unice.txt')
+    print(f"\n📊 Runde: {len(rounds):,}")
+    
+    # Generare
+    SAMPLE_SIZE = 250000  # Sample mai mare
+    variants = generate_hybrid_variants_optimized(blocks, rounds, SAMPLE_SIZE)
+    
+    if not variants:
+        print("\n❌ Nicio variantă validă!")
+        return
+    
+    # Selecție
+    selected = select_best_variants_greedy(variants, rounds, 1150)
+    
+    # Output
+    print(f"\n💾 Generare fișier...")
+    with open('/mnt/user-data/outputs/variante_1150_optimized.txt', 'w') as f:
+        for i, (idx, nums, m) in enumerate(selected, 1):
+            f.write(f"{i},{' '.join(str(n) for n in nums)}\n")
+    
+    print(f"  ✅ variante_1150_optimized.txt")
+    
+    # STATISTICI
+    print(f"\n{'='*70}")
+    print("📈 STATISTICI FINALE")
+    print(f"{'='*70}")
+    
+    total_4 = sum(m['count_4_4'] for _, _, m in selected)
+    total_3 = sum(m['count_3_3'] for _, _, m in selected)
+    total_2 = sum(m['count_2_2'] for _, _, m in selected)
+    
+    print(f"\n🎯 POTRIVIRI:")
+    print(f"  4/4: {total_4:,} ({total_4/len(selected):.2f}/variantă)")
+    print(f"  3/3: {total_3:,} ⭐ ({total_3/len(selected):.1f}/variantă)")
+    print(f"  2/2: {total_2:,} ({total_2/len(selected):.1f}/variantă)")
+    
+    # Acoperire
+    round_3_count = defaultdict(int)
+    round_4_count = defaultdict(int)
+    
+    for _, nums, m in selected:
+        for ri in m['rounds_3_3']:
+            round_3_count[ri] += 1
+        for ri in m['rounds_4_4']:
+            round_4_count[ri] += 1
+    
+    cov_3 = [round_3_count[i] for i in range(len(rounds))]
+    cov_4 = [round_4_count[i] for i in range(len(rounds))]
+    
+    print(f"\n📊 ACOPERIRE 3/3:")
+    print(f"  Medie: {np.mean(cov_3):.1f} | Mediană: {np.median(cov_3):.1f}")
+    print(f"  Range: {min(cov_3)}-{max(cov_3)}")
+    print(f"  Std: {np.std(cov_3):.2f}")
+    
+    print(f"\n🎯 ACOPERIRE 4/4:")
+    print(f"  Medie: {np.mean(cov_4):.2f} | Mediană: {np.median(cov_4):.1f}")
+    print(f"  Range: {min(cov_4)}-{max(cov_4)}")
+    
+    # Verificare hibrid
+    print(f"\n🌈 VERIFICARE HIBRID:")
+    all_nums = []
+    for _, nums, _ in selected:
+        all_nums.extend(nums)
+    
+    for min_n, max_n, name in blocks:
+        count = sum(1 for n in all_nums if min_n <= n <= max_n)
+        expected = len(selected)
+        print(f"  Bloc {name:8s}: {count}/{expected} ({count/expected*100:.1f}%)")
+    
+    # Diversitate
+    num_counts = Counter(all_nums)
+    print(f"\n🎨 DIVERSITATE:")
+    print(f"  Numere unice: {len(num_counts)}/65")
+    print(f"  Interval: {min(all_nums)}-{max(all_nums)}")
+    
+    # Top numere
+    top_nums = num_counts.most_common(10)
+    print(f"\n  Top 10 numere:")
+    for n, cnt in top_nums:
+        print(f"    {n}: {cnt}x")
+    
+    # Sample
+    print(f"\n📝 EXEMPLE:")
+    for i in [0, len(selected)//2, -1]:
+        idx, nums, m = selected[i]
+        blocks_str = []
+        for n in nums:
+            for bi, (min_n, max_n, _) in enumerate(blocks, 1):
+                if min_n <= n <= max_n:
+                    blocks_str.append(f"{n}(B{bi})")
+                    break
+        print(f"  Linia {i+1}: {' '.join(blocks_str)}")
+        print(f"           4/4={m['count_4_4']} | 3/3={m['count_3_3']} | 2/2={m['count_2_2']}")
+    
+    print(f"\n{'='*70}")
+    print("✅ COMPLET!")
+    print(f"{'='*70}")
+
+if __name__ == '__main__':
+    main()
