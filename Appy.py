@@ -37,9 +37,8 @@ def parse_runde(text):
         
         nums = [int(x) for x in linie.replace(',', ' ').split() if x.isdigit()]
         
-        # FĂRĂ RESTRICȚII: Orice linie cu cel puțin un număr este validă
         if len(nums) > 0:
-            runde.append(tuple(sorted(nums))) # Salvăm TOATE numerele găsite
+            runde.append(tuple(sorted(nums)))
             
     return runde
 
@@ -56,7 +55,6 @@ def parse_variante(text, chenar):
             id_var = parts[0]
             nums = [int(x) for x in parts[1:] if x.isdigit()]
             
-            # FĂRĂ RESTRICȚII: Încercăm să ghicim formatul
             if not nums and all(p.isdigit() for p in parts):
                  id_var = parts[0] 
                  nums = [int(x) for x in parts[1:] if x.isdigit()]
@@ -69,11 +67,10 @@ def parse_variante(text, chenar):
                  id_var = f"AutoID_{len(variante)+1}"
                  nums = [int(x) for x in parts if x.isdigit()]
 
-            # Singura regulă: să existe cel puțin un număr
             if len(nums) > 0: 
                 variante.append({
                     'id': id_var,
-                    'numere': tuple(sorted(nums)), # Salvăm TOATE numerele
+                    'numere': tuple(sorted(nums)),
                     'chenar': chenar
                 })
             
@@ -228,7 +225,6 @@ with st.form("form_runde"):
 
 with st.expander(f"Afișează rundele ({len(st.session_state.runde)} în total)"):
     if st.session_state.runde:
-        # Afișăm ca listă, deoarece DataFrame-ul e urât dacă rundele au lungimi diferite
         st.json([list(r) for r in st.session_state.runde])
     else:
         st.info("Nicio rundă adăugată.")
@@ -254,11 +250,15 @@ def afiseaza_chenar(i):
             with c1:
                 if st.form_submit_button("✅ Adaugă", type="primary"):
                     noi = parse_variante(text_var, f'C{i}')
-                    ids_existenti = {v['id'] for v in st.session_state[key]}
-                    variante_noi_filtrate = [v for v in noi if v['id'] not in ids_existenti]
+                    
+                    # =============== MODIFICARE: CURĂȚARE AUTOMATĂ ===============
+                    # Verificăm DUPĂ NUMERE, nu după ID
+                    numere_existente = {v['numere'] for v in st.session_state[key]}
+                    variante_noi_filtrate = [v for v in noi if v['numere'] not in numere_existente]
+                    # ===========================================================
                     
                     st.session_state[key].extend(variante_noi_filtrate)
-                    st.success(f"Adăugate {len(variante_noi_filtrate)} variante unice în Chenarul {i}.")
+                    st.success(f"Adăugate {len(variante_noi_filtrate)} variante unice (duplicatele de numere au fost ignorate) în Chenarul {i}.")
                     st.rerun()
             with c2:
                 if st.form_submit_button("❌ Șterge"):
@@ -280,7 +280,19 @@ for i in range(1, 6):
     afiseaza_chenar(i)
 
 # ================= TOATE VARIANTELE =================
-toate_variantele = sum((st.session_state[f'variante_{i}'] for i in range(1,6)), [])
+# =============== MODIFICARE: CURĂȚARE TOTALĂ ===============
+# După ce adunăm toate variantele din toate chenarele,
+# mai facem o curățare finală, ca să eliminăm duplicatele
+# dintre chenare (ex: aceeași variantă în Chenar 1 și Chenar 2).
+variante_brute = sum((st.session_state[f'variante_{i}'] for i in range(1,6)), [])
+numere_vazute = set()
+toate_variantele = []
+for v in variante_brute:
+    if v['numere'] not in numere_vazute:
+        toate_variantele.append(v)
+        numere_vazute.add(v['numere'])
+# ===========================================================
+
 
 st.divider()
 
@@ -308,7 +320,7 @@ if st.session_state.runde and toate_variantele:
                 "Câștiguri": v['castiguri']
             } for i, v in enumerate(st.session_state.top1150)])
             
-            st.info("Top 20 de variante cu cel mai bun scor AI:")
+            st.info(f"Top 20 din {len(toate_variantele)} variante unice analizate:")
             st.dataframe(top_df.head(20), use_container_width=True)
             
             with st.expander("Afișează toate cele 1150 de variante"):
@@ -381,11 +393,9 @@ if st.session_state.runde and toate_variantele:
             st.write(f"**Sugestii (combinații aleatorii de {num_sugestie} numere 'fierbinți'):**")
 
             if len(hot) >= num_sugestie:
-                # =============== MODIFICARE: FĂRĂ DUPLICATE ===============
                 sugestii_generate = set()
                 numar_sugestii_dorite = 5
                 
-                # Funcție locală pentru a calcula combinațiile
                 def combinations(n, k):
                     if k < 0 or k > n:
                         return 0
@@ -393,7 +403,6 @@ if st.session_state.runde and toate_variantele:
                         return 1
                     if k > n // 2:
                         k = n - k
-                    
                     res = 1
                     for i in range(k):
                         res = res * (n - i) // (i + 1)
@@ -405,24 +414,20 @@ if st.session_state.runde and toate_variantele:
                 if numar_sugestii_de_generat < numar_sugestii_dorite and max_combinatii > 0:
                     st.warning(f"Se pot genera doar {numar_sugestii_de_generat} sugestii unice din numerele disponibile.")
 
-                # Siguranță pentru a evita o buclă infinită
                 incercari = 0
-                max_incercari = numar_sugestii_de_generat * 50 + 50 # 50 încercări per sugestie + 50 extra
+                max_incercari = numar_sugestii_de_generat * 50 + 50
                 
                 while len(sugestii_generate) < numar_sugestii_de_generat and incercari < max_incercari:
                     sugestie_lista = sorted(random.sample(hot, num_sugestie))
-                    sugestie_tuplu = tuple(sugestie_lista) # Tuplu e hashabil
+                    sugestie_tuplu = tuple(sugestie_lista)
                     
-                    # Salvăm mărimea setului înainte de a adăuga
                     marime_inainte = len(sugestii_generate)
                     sugestii_generate.add(sugestie_tuplu)
                     
-                    # Dacă mărimea s-a schimbat, afișăm sugestia nouă
                     if len(sugestii_generate) > marime_inainte:
                         st.code(f"Sugestia {len(sugestii_generate)}:  {'  '.join(map(str, sugestie_lista))}")
                     
                     incercari += 1
-                # ===========================================================
             else:
                 st.warning(f"Nu există suficiente numere 'fierbinți' (minim {num_sugestie}) pentru a genera sugestii.")
         else:
