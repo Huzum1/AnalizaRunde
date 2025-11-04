@@ -251,11 +251,22 @@ def afiseaza_chenar(i):
                 if st.form_submit_button("✅ Adaugă", type="primary"):
                     noi = parse_variante(text_var, f'C{i}')
                     
-                    # =============== MODIFICARE: CURĂȚARE AUTOMATĂ ===============
-                    # Verificăm DUPĂ NUMERE, nu după ID
+                    # =============== CORECȚIE BUG ===============
+                    # 1. Obținem numerele deja existente în session_state
                     numere_existente = {v['numere'] for v in st.session_state[key]}
-                    variante_noi_filtrate = [v for v in noi if v['numere'] not in numere_existente]
-                    # ===========================================================
+                    
+                    variante_noi_filtrate = []
+                    
+                    # 2. Iterăm prin variantele NOI parcurse
+                    for v in noi:
+                        # Verificăm dacă numărul e deja în set
+                        if v['numere'] not in numere_existente:
+                            # Dacă nu e, îl adăugăm la listă
+                            variante_noi_filtrate.append(v)
+                            # și îl adăugăm *imediat* la set
+                            # pentru a bloca duplicatele *din același lot*
+                            numere_existente.add(v['numere'])
+                    # ============================================
                     
                     st.session_state[key].extend(variante_noi_filtrate)
                     st.success(f"Adăugate {len(variante_noi_filtrate)} variante unice (duplicatele de numere au fost ignorate) în Chenarul {i}.")
@@ -280,10 +291,7 @@ for i in range(1, 6):
     afiseaza_chenar(i)
 
 # ================= TOATE VARIANTELE =================
-# =============== MODIFICARE: CURĂȚARE TOTALĂ ===============
-# După ce adunăm toate variantele din toate chenarele,
-# mai facem o curățare finală, ca să eliminăm duplicatele
-# dintre chenare (ex: aceeași variantă în Chenar 1 și Chenar 2).
+# De-duplicare finală (între chenare)
 variante_brute = sum((st.session_state[f'variante_{i}'] for i in range(1,6)), [])
 numere_vazute = set()
 toate_variantele = []
@@ -291,7 +299,6 @@ for v in variante_brute:
     if v['numere'] not in numere_vazute:
         toate_variantele.append(v)
         numere_vazute.add(v['numere'])
-# ===========================================================
 
 
 st.divider()
@@ -320,118 +327,4 @@ if st.session_state.runde and toate_variantele:
                 "Câștiguri": v['castiguri']
             } for i, v in enumerate(st.session_state.top1150)])
             
-            st.info(f"Top 20 din {len(toate_variantele)} variante unice analizate:")
-            st.dataframe(top_df.head(20), use_container_width=True)
-            
-            with st.expander("Afișează toate cele 1150 de variante"):
-                st.dataframe(top_df, use_container_width=True, height=500)
-                
-            txt_export = "\n".join([
-                f"{v['ID']}, {' '.join(v['Numere'].split())}" 
-                for _, v in top_df.iterrows()
-            ])
-            st.download_button("📥 Descarcă Top 1150 (txt)", txt_export, "top1150.txt", "text/plain")
-        else:
-            st.info("Apasă pe buton pentru a calcula Top 1150.")
-
-    with tab2:
-        st.subheader("Acoperire Minimă")
-        st.write("Găsește cel mai mic set de variante care ar fi „câștigat” (cu `min_match` potriviri) în toate rundele câștigătoare din istoric.")
-        
-        if st.button("Calculează Acoperirea", type="primary"):
-            ac = acoperire_minima(toate_variantele, st.session_state.runde, min_match)
-            st.session_state.acoperire = ac
-            
-        if 'acoperire' in st.session_state:
-            acoperire_data = st.session_state.acoperire
-            st.success(f"**{len(acoperire_data)} variante** sunt necesare pentru a acoperi toate rundele câștigătoare din istoric.")
-            if acoperire_data:
-                df_acoperire = pd.DataFrame([
-                    {"Chenar": v['chenar'], "ID": v['id'], "Numere": " ".join(map(str, v['numere']))} 
-                    for v in acoperire_data
-                ])
-                st.dataframe(df_acoperire, use_container_width=True)
-            else:
-                st.warning("Nicio variantă nu a îndeplinit criteriul de câștig minim în rundele furnizate.")
-        else:
-            st.info("Apasă pe buton pentru a calcula acoperirea minimă.")
-
-    with tab3:
-        st.subheader("Top 10 Cele Mai Consistente Variante")
-        st.write("Variantele care au avut cea mai mare frecvență de câștiguri (cu `min_match` potriviri) de-a lungul timpului.")
-        
-        consistente = calculeaza_consistenta(toate_variantele, st.session_state.runde, min_match)
-        
-        if consistente:
-            df_cons = pd.DataFrame([{
-                "Chenar": v['chenar'], "ID": v['id'], "Numere": " ".join(map(str, v['numere'])),
-                "Frecvență": v['frecventa']
-            } for v in consistente[:10]])
-            
-            st.dataframe(
-                df_cons, 
-                use_container_width=True,
-                column_config={"Frecvență": st.column_config.ProgressColumn("Frecvență", format="%.1f%%", min_value=0, max_value=max(0.01, df_cons['Frecvență'].max()))}
-            )
-        else:
-            st.info("Nu s-au putut calcula date de consistență.")
-
-    with tab4:
-        st.subheader("Sugestii Bazate pe Numere Fierbinți")
-        
-        runde_recente = st.session_state.runde[-50:]
-        if runde_recente:
-            numere = [n for r in runde_recente for n in r]
-            contor_numere = Counter(numere)
-            
-            hot = [x[0] for x in contor_numere.most_common(18)]
-            
-            st.write(f"**Cele mai 'fierbinți' 18 numere din ultimele {len(runde_recente)} runde:**")
-            st.info(", ".join(map(str, sorted(hot))))
-            
-            num_sugestie = st.slider("Numere per sugestie:", 3, 10, 6)
-            st.write(f"**Sugestii (combinații aleatorii de {num_sugestie} numere 'fierbinți'):**")
-
-            if len(hot) >= num_sugestie:
-                sugestii_generate = set()
-                numar_sugestii_dorite = 5
-                
-                def combinations(n, k):
-                    if k < 0 or k > n:
-                        return 0
-                    if k == 0 or k == n:
-                        return 1
-                    if k > n // 2:
-                        k = n - k
-                    res = 1
-                    for i in range(k):
-                        res = res * (n - i) // (i + 1)
-                    return res
-
-                max_combinatii = combinations(len(hot), num_sugestie)
-                numar_sugestii_de_generat = min(numar_sugestii_dorite, max_combinatii)
-                
-                if numar_sugestii_de_generat < numar_sugestii_dorite and max_combinatii > 0:
-                    st.warning(f"Se pot genera doar {numar_sugestii_de_generat} sugestii unice din numerele disponibile.")
-
-                incercari = 0
-                max_incercari = numar_sugestii_de_generat * 50 + 50
-                
-                while len(sugestii_generate) < numar_sugestii_de_generat and incercari < max_incercari:
-                    sugestie_lista = sorted(random.sample(hot, num_sugestie))
-                    sugestie_tuplu = tuple(sugestie_lista)
-                    
-                    marime_inainte = len(sugestii_generate)
-                    sugestii_generate.add(sugestie_tuplu)
-                    
-                    if len(sugestii_generate) > marime_inainte:
-                        st.code(f"Sugestia {len(sugestii_generate)}:  {'  '.join(map(str, sugestie_lista))}")
-                    
-                    incercari += 1
-            else:
-                st.warning(f"Nu există suficiente numere 'fierbinți' (minim {num_sugestie}) pentru a genera sugestii.")
-        else:
-            st.warning("Nu există runde pentru a calcula numere fierbinți.")
-
-else:
-    st.warning("Te rog adaugă cel puțin o rundă și o variantă pentru a începe analiza.")
+            st.info(f"Top 20 din {len(toate_variantele)}
