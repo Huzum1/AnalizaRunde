@@ -8,15 +8,15 @@ from datetime import datetime
 import hashlib
 import json
 
-# Configurare paginÄ
+# Configurare pagină
 st.set_page_config(
-    page_title="AnalizÄ AvansatÄ Loterie",
-    page_icon="đ°",
+    page_title="Analiză Avansată Loterie",
+    page_icon="🎰",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# CSS Custom pentru design ĂŽmbunÄtÄČit
+# CSS Custom pentru design îmbunătățit
 st.markdown("""
 <style>
     .stTabs [data-baseweb="tab-list"] button {
@@ -42,10 +42,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Titlu principal cu emoji animat
-st.title("đ° AnalizÄ AvansatÄ Loterie - Sistem Optimizat")
+st.title("🎰 Analiză Avansată Loterie - Sistem Optimizat")
 st.caption(f"Ultima actualizare: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
-# IniČializare session state cu structurÄ optimizatÄ
+# Inițializare session state cu structură optimizată
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.runde = []
@@ -55,15 +55,15 @@ if 'initialized' not in st.session_state:
     st.session_state.last_calculation = None
 
 # ======================
-# FUNCČII OPTIMIZATE
+# FUNCȚII OPTIMIZATE
 # ======================
 
 def elimina_duplicate(variante_list):
-    """EliminÄ variantele duplicate pÄstrĂ˘nd prima apariČie"""
+    """Elimină variantele duplicate păstrând prima apariție"""
     seen = set()
     unice = []
     for var in variante_list:
-        # Creare cheie unicÄ din numere sortate
+        # Creare cheie unică din numere sortate
         key = tuple(sorted(var['numere']))
         if key not in seen:
             seen.add(key)
@@ -71,7 +71,7 @@ def elimina_duplicate(variante_list):
     return unice
 
 def valideaza_stabilitate_cross(varianta, runde_list, ferestre=5):
-    """Validare ĂŽncruciČatÄ - testeazÄ stabilitatea pe ferestre temporale multiple"""
+    """Validare încrucișată - testează stabilitatea pe ferestre temporale multiple"""
     if len(runde_list) < ferestre * 2:
         return 0
     
@@ -88,31 +88,31 @@ def valideaza_stabilitate_cross(varianta, runde_list, ferestre=5):
             potriviri.append(len(set(varianta) & set(runda)))
         
         if potriviri:
-            # CalculeazÄ consistenČa ĂŽn fereastrÄ
+            # Calculează consistența în fereastră
             media = np.mean(potriviri)
             std = np.std(potriviri)
             consistenta = media / (std + 0.1) if std > 0 else media
             scoruri_ferestre.append(consistenta)
     
-    # ReturneazÄ consistenČa medie ĂŽntre ferestre
+    # Returnează consistența medie între ferestre
     return np.mean(scoruri_ferestre) if scoruri_ferestre else 0
 
 def simuleaza_performanta_viitoare(varianta, runde_istorice, nr_simulari=100):
-    """SimuleazÄ performanČa viitoare bazatÄ pe pattern-uri istorice"""
-    # AnalizÄ distribuČie numere ĂŽn istoric
+    """Simulează performanța viitoare bazată pe pattern-uri istorice"""
+    # Analiză distribuție numere în istoric
     frecvente = Counter()
     for runda in runde_istorice:
         for num in runda:
             frecvente[num] += 1
     
-    # Normalizare probabilitÄČi
+    # Normalizare probabilități
     total = sum(frecvente.values())
     probabilitati = {num: freq/total for num, freq in frecvente.items()}
     
     # Simulare runde viitoare
     scoruri_simulate = []
     for _ in range(nr_simulari):
-        # Generare rundÄ simulatÄ bazatÄ pe probabilitÄČi istorice
+        # Generare rundă simulată bazată pe probabilități istorice
         numere_posibile = list(probabilitati.keys())
         if len(numere_posibile) >= 6:
             prob_vals = [probabilitati[n] for n in numere_posibile]
@@ -136,22 +136,22 @@ def simuleaza_performanta_viitoare(varianta, runde_istorice, nr_simulari=100):
     return {'media_simulata': 0, 'stabilitate_simulata': 0, 'castiguri_simulate': 0}
 
 def identifica_variante_evergreen(variante_list, runde_list, top_n=50):
-    """IdentificÄ variante 'evergreen' - stabile pe orice perioadÄ + viitor"""
+    """Identifică variante 'evergreen' - stabile pe orice perioadă + viitor"""
     evergreen = []
     
     for var in variante_list:
         # Test pe diferite perioade istorice
         scor_total = valideaza_stabilitate_cross(var['numere'], runde_list)
         
-        # Test pe prima jumÄtate vs a doua jumÄtate
+        # Test pe prima jumătate vs a doua jumătate
         mid = len(runde_list) // 2
         scor_prima = valideaza_stabilitate_cross(var['numere'], runde_list[:mid], 2)
         scor_doua = valideaza_stabilitate_cross(var['numere'], runde_list[mid:], 2)
         
-        # DiferenČa micÄ = stabilitate ĂŽntre perioade
+        # Diferența mică = stabilitate între perioade
         diferenta = abs(scor_prima - scor_doua) if scor_prima > 0 and scor_doua > 0 else 1
         
-        # Simulare performanČÄ viitoare
+        # Simulare performanță viitoare
         perf_viitoare = simuleaza_performanta_viitoare(var['numere'], runde_list)
         
         # Scor evergreen compus
@@ -170,19 +170,19 @@ def identifica_variante_evergreen(variante_list, runde_list, top_n=50):
             'media_viitor': perf_viitoare['media_simulata']
         })
     
-    # Sortare dupÄ scor evergreen
+    # Sortare după scor evergreen
     evergreen.sort(key=lambda x: x['scor_evergreen'], reverse=True)
     return evergreen[:top_n]
 
 @st.cache_data(ttl=3600)
 def calculeaza_hash_date(runde, variante):
-    """CreeazÄ un hash unic pentru setul de date pentru cache"""
+    """Creează un hash unic pentru setul de date pentru cache"""
     data_str = json.dumps({'runde': runde, 'variante': variante}, sort_keys=True)
     return hashlib.md5(data_str.encode()).hexdigest()
 
 @st.cache_data(ttl=3600)
 def verifica_varianta_batch(variante_list, runde_list):
-    """VerificÄ toate variantele contra tuturor rundelor - vectorizat pentru performanČÄ"""
+    """Verifică toate variantele contra tuturor rundelor - vectorizat pentru performanță"""
     rezultate = []
     
     for varianta in variante_list:
@@ -205,22 +205,22 @@ def verifica_varianta_batch(variante_list, runde_list):
 
 @st.cache_data(ttl=3600)
 def calculeaza_metrici_avansate(variante_rezultate, runde_list, numar_minim=4):
-    """CalculeazÄ metrici statistice avansate pentru variante"""
+    """Calculează metrici statistice avansate pentru variante"""
     metrici = []
     
     for var_rez in variante_rezultate:
         potriviri = var_rez['potriviri']
         
-        # Metrici de bazÄ
+        # Metrici de bază
         castiguri = sum(1 for p in potriviri if p >= numar_minim)
         total_potriviri = sum(potriviri)
         
         # Metrici avansate
         if potriviri:
-            # Stabilitate (deviaČia standard inversÄ)
+            # Stabilitate (deviația standard inversă)
             stabilitate = 1 / (np.std(potriviri) + 0.1)
             
-            # ConsistenČÄ (cĂ˘te runde consecutive cu minim 2 potriviri)
+            # Consistență (câte runde consecutive cu minim 2 potriviri)
             consecutiv = 0
             max_consecutiv = 0
             for p in potriviri:
@@ -235,21 +235,21 @@ def calculeaza_metrici_avansate(variante_rezultate, runde_list, numar_minim=4):
             x = np.arange(len(potriviri))
             trend = np.polyfit(x, potriviri, 1)[0] if len(potriviri) > 1 else 0
             
-            # EficienČÄ (raport cĂ˘Čtiguri/runde)
+            # Eficiență (raport câștiguri/runde)
             eficienta = castiguri / len(runde_list) if runde_list else 0
             
-            # DistribuČie potriviri
+            # Distribuție potriviri
             distributie = Counter(potriviri)
             
             # Scor compozit - PRIORITATE STABILITATE
             scor = (
-                stabilitate * 100 +  # STABILITATE MAXIMÄ
-                consistenta * 50 +   # ConsistenČÄ pe termen lung
-                castiguri * 5 +      # CĂ˘Čtiguri secundare
+                stabilitate * 100 +  # STABILITATE MAXIMĂ
+                consistenta * 50 +   # Consistență pe termen lung
+                castiguri * 5 +      # Câștiguri secundare
                 eficienta * 20 +
                 abs(trend) * -5 +    # Penalizare pentru volatilitate
-                distributie.get(3, 0) * 10 +  # PreferÄ potriviri constante 3/3
-                distributie.get(4, 0) * 15    # Či 4/4 vs jackpot-uri rare
+                distributie.get(3, 0) * 10 +  # Preferă potriviri constante 3/3
+                distributie.get(4, 0) * 15    # și 4/4 vs jackpot-uri rare
             )
         else:
             stabilitate = consistenta = trend = eficienta = scor = 0
@@ -273,7 +273,7 @@ def calculeaza_metrici_avansate(variante_rezultate, runde_list, numar_minim=4):
     return sorted(metrici, key=lambda x: x['scor'], reverse=True)
 
 def analizeaza_chenare_comparativ(toate_variantele, runde_list, numar_minim=4):
-    """AnalizÄ comparativÄ detaliatÄ ĂŽntre chenare"""
+    """Analiză comparativă detaliată între chenare"""
     rezultate_chenare = defaultdict(lambda: {
         'variante': [],
         'total_castiguri': 0,
@@ -291,7 +291,7 @@ def analizeaza_chenare_comparativ(toate_variantele, runde_list, numar_minim=4):
         if not variante_chenar:
             continue
             
-        # Procesare batch pentru performanČÄ
+        # Procesare batch pentru performanță
         rezultate = verifica_varianta_batch(variante_chenar, runde_list)
         metrici = calculeaza_metrici_avansate(rezultate, runde_list, numar_minim)
         
@@ -303,11 +303,11 @@ def analizeaza_chenare_comparativ(toate_variantele, runde_list, numar_minim=4):
             for num in metrica['numere']:
                 rezultate_chenare[chenar_key]['numere_frecvente'][num] += 1
             
-            # Actualizare distribuČie
+            # Actualizare distribuție
             for k, v in metrica['distributie'].items():
                 rezultate_chenare[chenar_key]['distributie_globala'][k] += v
             
-            # Identificare runde cĂ˘ČtigÄtoare
+            # Identificare runde câștigătoare
             for idx, p in enumerate(metrica['potriviri_detalii']):
                 if p >= numar_minim:
                     rezultate_chenare[chenar_key]['acoperire_runde'].add(idx)
@@ -321,23 +321,23 @@ def analizeaza_chenare_comparativ(toate_variantele, runde_list, numar_minim=4):
     return dict(rezultate_chenare)
 
 def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_varianta=4):
-    """GenereazÄ 1150 variante de 4 numere pentru acoperire maximÄ 4/4 din 66"""
+    """Generează 1150 variante de 4 numere pentru acoperire maximă 4/4 din 66"""
     
     variante = []
     
-    # Pentru 4 numere din 66, strategia optimÄ
-    # C(66,4) = 677,040 combinaČii posibile
+    # Pentru 4 numere din 66, strategia optimă
+    # C(66,4) = 677,040 combinații posibile
     # 1150 variante = 0.17% coverage direct
     
     # 1. Core numbers - cele mai frecvente 30-35 numere
     core_numbers = list(numere_frecvente.keys())[:35]
     
-    # 2. Generare combinaČii cu overlap strategic pentru 4 numere
+    # 2. Generare combinații cu overlap strategic pentru 4 numere
     from itertools import combinations
     
-    # Prima parte: combinaČii dense din top 20 (C(20,4) = 4845)
+    # Prima parte: combinații dense din top 20 (C(20,4) = 4845)
     combos_top = list(combinations(core_numbers[:20], 4))
-    # Selectare uniformÄ din acestea
+    # Selectare uniformă din acestea
     step = len(combos_top) // 400 if len(combos_top) > 400 else 1
     for i in range(0, len(combos_top), step):
         if len(variante) >= 400:
@@ -358,7 +358,7 @@ def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_var
     # Ultima parte: coverage pe toate numerele 1-66
     all_numbers = list(range(1, 67))
     while len(variante) < nr_variante:
-        # DistribuČie: 2 frecvente + 2 random pentru diversitate
+        # Distribuție: 2 frecvente + 2 random pentru diversitate
         if numere_frecvente:
             freq = np.random.choice(core_numbers[:25], 2, replace=False)
             rand = np.random.choice(all_numbers, 2, replace=False)
@@ -372,7 +372,7 @@ def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_var
     return variante[:nr_variante]
 
 def analizeaza_acoperire_44(variante, runde_test, target=4):
-    """AnalizeazÄ cĂ˘te runde sunt acoperite cu 4/4 pentru variante de 4 numere"""
+    """Analizează câte runde sunt acoperite cu 4/4 pentru variante de 4 numere"""
     runde_acoperite = 0
     detalii = []
     
@@ -380,9 +380,9 @@ def analizeaza_acoperire_44(variante, runde_test, target=4):
         acoperita = False
         best_match = 0
         
-        # Pentru variante de 4 numere, verificÄm potriviri complete
+        # Pentru variante de 4 numere, verificăm potriviri complete
         for var in variante:
-            potriviri = len(set(var) & set(runda[:4]))  # ComparÄ cu primele 4 din rundÄ
+            potriviri = len(set(var) & set(runda[:4]))  # Compară cu primele 4 din rundă
             best_match = max(best_match, potriviri)
             if potriviri >= target:  # Pentru 4 numere, target 4 = toate
                 acoperita = True
@@ -405,51 +405,51 @@ def analizeaza_acoperire_44(variante, runde_test, target=4):
     }
 
 def optimizeaza_pentru_1150(runde_istorice, nr_variante=1150):
-    """Optimizare specificÄ pentru 1150 variante de 4 numere din 66"""
+    """Optimizare specifică pentru 1150 variante de 4 numere din 66"""
     
-    # AnalizÄ frecvenČe pentru numere 1-66
+    # Analiză frecvențe pentru numere 1-66
     frecvente = Counter()
     perechi = Counter()
     triplete = Counter()
     quadruplete = Counter()
     
     for runda in runde_istorice:
-        # LuÄm doar primele 4 numere din fiecare rundÄ
+        # Luăm doar primele 4 numere din fiecare rundă
         numere_runda = runda[:4] if len(runda) >= 4 else runda
         
         for num in numere_runda:
             frecvente[num] += 1
         
-        # AnalizÄ perechi
+        # Analiză perechi
         for i in range(len(numere_runda)):
             for j in range(i+1, len(numere_runda)):
                 perechi[(min(numere_runda[i], numere_runda[j]), 
                         max(numere_runda[i], numere_runda[j]))] += 1
         
-        # AnalizÄ triplete
+        # Analiză triplete
         if len(numere_runda) >= 3:
             for combo in combinations(sorted(numere_runda), 3):
                 triplete[combo] += 1
         
-        # AnalizÄ quadruplete complete
+        # Analiză quadruplete complete
         if len(numere_runda) >= 4:
             quad = tuple(sorted(numere_runda[:4]))
             quadruplete[quad] += 1
     
     variante = []
     
-    # 15% quadruplete exacte care au apÄrut (dacÄ existÄ)
+    # 15% quadruplete exacte care au apărut (dacă există)
     for quad, _ in quadruplete.most_common(170):
         if len(variante) >= 170:
             break
         variante.append(list(quad))
     
-    # 35% bazate pe triplete frecvente + 1 numÄr frecvent
+    # 35% bazate pe triplete frecvente + 1 număr frecvent
     for triplet, _ in triplete.most_common(450):
         if len(variante) >= 570:
             break
         base = list(triplet)
-        # GÄseČte numÄr frecvent care nu e ĂŽn triplet
+        # Găsește număr frecvent care nu e în triplet
         candidati = [n for n in frecvente.keys() if n not in base and 1 <= n <= 66][:20]
         if candidati:
             completare = np.random.choice(candidati, 1)
@@ -473,12 +473,12 @@ def optimizeaza_pentru_1150(runde_istorice, nr_variante=1150):
     return variante[:nr_variante]
 
 def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_varianta=6):
-    """GenereazÄ o variantÄ optimÄ combinĂ˘nd cele mai bune elemente"""
-    # AnalizÄ frecvenČÄ numere din top variante
+    """Generează o variantă optimă combinând cele mai bune elemente"""
+    # Analiză frecvență numere din top variante
     frecventa_numere = Counter()
     scoruri_numere = defaultdict(float)
     
-    for var in top_variante[:50]:  # AnalizÄm top 50
+    for var in top_variante[:50]:  # Analizăm top 50
         for num in var['numere']:
             frecventa_numere[num] += 1
             scoruri_numere[num] += var['scor'] / len(var['numere'])
@@ -489,7 +489,7 @@ def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_var
         scor_ponderat = scoruri_numere[num] * (1 + freq / 100)
         numere_ponderate.append((num, scor_ponderat))
     
-    # Sortare Či selectare top numere
+    # Sortare și selectare top numere
     numere_ponderate.sort(key=lambda x: x[1], reverse=True)
     
     # Creare mai multe variante combinate
@@ -499,25 +499,25 @@ def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_var
     var1 = [num for num, _ in numere_ponderate[:nr_numere]]
     variante_combinate.append(('Top Absolut', var1))
     
-    # Varianta 2: DiversificatÄ (evitÄ clustere)
+    # Varianta 2: Diversificată (evită clustere)
     var2 = []
     numere_folosite = set()
     for num, scor in numere_ponderate:
         if len(var2) >= nr_numere:
             break
-        # EvitÄ numere consecutive
+        # Evită numere consecutive
         if not any(abs(num - n) <= 1 for n in numere_folosite):
             var2.append(num)
             numere_folosite.add(num)
-    # Completare dacÄ e nevoie
+    # Completare dacă e nevoie
     for num, _ in numere_ponderate:
         if len(var2) >= nr_numere:
             break
         if num not in var2:
             var2.append(num)
-    variante_combinate.append(('DiversificatÄ', var2[:nr_numere]))
+    variante_combinate.append(('Diversificată', var2[:nr_numere]))
     
-    # Varianta 3: EchilibratÄ (mix ĂŽntre frecvenČÄ Či stabilitate)
+    # Varianta 3: Echilibrată (mix între frecvență și stabilitate)
     top_stabile = sorted(top_variante[:100], key=lambda x: x['stabilitate'], reverse=True)[:20]
     numere_stabile = Counter()
     for var in top_stabile:
@@ -529,7 +529,7 @@ def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_var
         if len(var3) >= nr_numere:
             break
         var3.append(num)
-    variante_combinate.append(('EchilibratÄ', var3))
+    variante_combinate.append(('Echilibrată', var3))
     
     return variante_combinate
 
@@ -559,7 +559,7 @@ def parse_input_optimizat(text, tip='runde', chenar_id=None):
                     id_var = parti[0].strip()
                     numere_str = parti[1].strip()
                 else:
-                    # DacÄ nu are ID, genereazÄ unul
+                    # Dacă nu are ID, generează unul
                     id_var = f"V{len(rezultate)+1}"
                     numere_str = linie
                 
@@ -582,32 +582,32 @@ def parse_input_optimizat(text, tip='runde', chenar_id=None):
     return rezultate
 
 # ======================
-# INTERFAČÄ PRINCIPALÄ
+# INTERFAȚĂ PRINCIPALĂ
 # ======================
 
-# Sidebar pentru setÄri globale
+# Sidebar pentru setări globale
 with st.sidebar:
-    st.header("âď¸ SetÄri Globale")
+    st.header("⚙️ Setări Globale")
     
     numar_minim = st.slider(
-        "Numere minime pentru cĂ˘Čtig:",
+        "Numere minime pentru câștig:",
         min_value=2,
         max_value=6,
         value=4,
-        help="NumÄrul minim de potriviri pentru a considera o rundÄ cĂ˘ČtigÄtoare"
+        help="Numărul minim de potriviri pentru a considera o rundă câștigătoare"
     )
     
     st.divider()
     
-    st.subheader("đ OpČiuni Vizualizare")
-    show_charts = st.checkbox("AfiČeazÄ grafice", value=True)
-    show_heatmap = st.checkbox("AfiČeazÄ heatmap", value=True)
-    show_predictions = st.checkbox("AfiČeazÄ predicČii", value=False)
+    st.subheader("📊 Opțiuni Vizualizare")
+    show_charts = st.checkbox("Afișează grafice", value=True)
+    show_heatmap = st.checkbox("Afișează heatmap", value=True)
+    show_predictions = st.checkbox("Afișează predicții", value=False)
     
     st.divider()
     
     # Statistici rapide
-    st.subheader("đ Statistici Rapide")
+    st.subheader("📈 Statistici Rapide")
     total_runde = len(st.session_state.runde)
     total_variante = sum(len(v) for v in st.session_state.variante.values())
     
@@ -617,21 +617,21 @@ with st.sidebar:
 
 # Tab-uri principale
 tab_input, tab_analiza, tab_combinare, tab_1150, tab_predictii = st.tabs([
-    "đĽ Date Input",
-    "đ AnalizÄ DetaliatÄ", 
-    "đ Combinare InteligentÄ",
-    "đŻ Strategie 1150 (4/4)",
-    "đŽ PredicČii & TendinČe"
+    "📥 Date Input",
+    "📊 Analiză Detaliată", 
+    "🔄 Combinare Inteligentă",
+    "🎯 Strategie 1150 (4/4)",
+    "🔮 Predicții & Tendințe"
 ])
 
 # ======================
 # TAB 1: INPUT DATE
 # ======================
 with tab_input:
-    st.header("đ Gestionare Date")
+    st.header("📋 Gestionare Date")
     
-    # SecČiune Runde
-    with st.expander("đ˛ **RUNDE**", expanded=True):
+    # Secțiune Runde
+    with st.expander("🎲 **RUNDE**", expanded=True):
         col1, col2 = st.columns([3, 1])
         
         with col1:
@@ -644,20 +644,20 @@ with tab_input:
         
         with col2:
             st.write("")  # Spacing
-            if st.button("â AdaugÄ Runde", type="primary", use_container_width=True):
+            if st.button("➕ Adaugă Runde", type="primary", use_container_width=True):
                 if text_runde:
                     with st.spinner("Procesare..."):
                         runde_noi = parse_input_optimizat(text_runde, tip='runde')
                         if runde_noi:
                             st.session_state.runde.extend(runde_noi)
-                            st.success(f"â {len(runde_noi)} runde adÄugate")
+                            st.success(f"✅ {len(runde_noi)} runde adăugate")
                             st.balloons()
             
-            if st.button("đď¸ Čterge Toate", use_container_width=True):
+            if st.button("🗑️ Șterge Toate", use_container_width=True):
                 st.session_state.runde = []
                 st.rerun()
             
-            if st.button("đ Statistici", use_container_width=True):
+            if st.button("📊 Statistici", use_container_width=True):
                 if st.session_state.runde:
                     toate_numerele = []
                     for runda in st.session_state.runde:
@@ -667,13 +667,13 @@ with tab_input:
                     for num, count in freq.most_common(5):
                         st.caption(f"{num}: {count}x")
         
-        # AfiČare runde existente
+        # Afișare runde existente
         if st.session_state.runde:
-            st.info(f"đ Total: {len(st.session_state.runde)} runde ĂŽncÄrcate")
+            st.info(f"📌 Total: {len(st.session_state.runde)} runde încărcate")
             
             # Container cu scroll pentru runde
             with st.container():
-                # AfiČare primele 5 Či ultimele 5 runde
+                # Afișare primele 5 și ultimele 5 runde
                 if len(st.session_state.runde) > 10:
                     st.caption("Primele 5 runde:")
                     for i, runda in enumerate(st.session_state.runde[:5], 1):
@@ -689,8 +689,8 @@ with tab_input:
     
     st.divider()
     
-    # SecČiune Variante - OrganizatÄ ĂŽn tabs
-    st.header("đŻ Variante pe Chenare")
+    # Secțiune Variante - Organizată în tabs
+    st.header("🎯 Variante pe Chenare")
     
     chenar_tabs = st.tabs([f"Chenar {i}" for i in range(1, 6)])
     
@@ -710,7 +710,7 @@ with tab_input:
             
             with col2:
                 st.write("")  # Spacing
-                if st.button(f"â AdaugÄ", type="primary", key=f"add_{idx}", use_container_width=True):
+                if st.button(f"➕ Adaugă", type="primary", key=f"add_{idx}", use_container_width=True):
                     if text_variante:
                         with st.spinner("Procesare..."):
                             variante_noi = parse_input_optimizat(
@@ -720,9 +720,9 @@ with tab_input:
                             )
                             if variante_noi:
                                 st.session_state.variante[chenar_key].extend(variante_noi)
-                                st.success(f"â {len(variante_noi)} variante adÄugate")
+                                st.success(f"✅ {len(variante_noi)} variante adăugate")
                 
-                if st.button(f"đď¸ Čterge", key=f"del_{idx}", use_container_width=True):
+                if st.button(f"🗑️ Șterge", key=f"del_{idx}", use_container_width=True):
                     st.session_state.variante[chenar_key] = []
                     st.rerun()
                 
@@ -731,25 +731,25 @@ with tab_input:
                 if variante_chenar:
                     st.metric("Total", len(variante_chenar))
                     
-                    # Numere unice ĂŽn chenar
+                    # Numere unice în chenar
                     numere_unice = set()
                     for var in variante_chenar:
                         numere_unice.update(var['numere'])
                     st.caption(f"Numere unice: {len(numere_unice)}")
             
-            # AfiČare variante existente
+            # Afișare variante existente
             if st.session_state.variante[chenar_key]:
                 with st.expander(f"Vezi variante ({len(st.session_state.variante[chenar_key])} total)"):
                     for var in st.session_state.variante[chenar_key][:10]:
                         st.text(f"{var['id']}: {' '.join(map(str, var['numere']))}")
                     if len(st.session_state.variante[chenar_key]) > 10:
-                        st.caption(f"... Či alte {len(st.session_state.variante[chenar_key])-10} variante")
+                        st.caption(f"... și alte {len(st.session_state.variante[chenar_key])-10} variante")
 
 # ======================
-# TAB 2: ANALIZÄ DETALIATÄ
+# TAB 2: ANALIZĂ DETALIATĂ
 # ======================
 with tab_analiza:
-    st.header("đ AnalizÄ Stabilitate MaximÄ & Variante Evergreen")
+    st.header("📊 Analiză Stabilitate Maximă & Variante Evergreen")
     
     # Verificare date disponibile
     toate_variantele = []
@@ -760,19 +760,19 @@ with tab_analiza:
     toate_variantele = elimina_duplicate(toate_variantele)
     
     if not st.session_state.runde or not toate_variantele:
-        st.warning("â ď¸ Te rog adaugÄ runde Či variante ĂŽn tab-ul 'Date Input' pentru a ĂŽncepe analiza.")
+        st.warning("⚠️ Te rog adaugă runde și variante în tab-ul 'Date Input' pentru a începe analiza.")
     else:
-        st.info(f"đ Analizez {len(toate_variantele)} variante UNICE (duplicate eliminate)")
+        st.info(f"📌 Analizez {len(toate_variantele)} variante UNICE (duplicate eliminate)")
         
         # Buton pentru recalculare
-        if st.button("đ RecalculeazÄ Analiza", type="primary"):
+        if st.button("🔄 Recalculează Analiza", type="primary"):
             st.session_state.rezultate_cache = {}
             st.rerun()
         
-        # SECČIUNE VARIANTE EVERGREEN
-        st.subheader("đ Variante EVERGREEN - Stabile pe Termen Lung")
+        # SECȚIUNE VARIANTE EVERGREEN
+        st.subheader("🌟 Variante EVERGREEN - Stabile pe Termen Lung")
         
-        with st.spinner("đ Caut variante cu stabilitate maximÄ pe toate perioadele..."):
+        with st.spinner("🔍 Caut variante cu stabilitate maximă pe toate perioadele..."):
             # Identificare variante evergreen
             variante_evergreen = identifica_variante_evergreen(
                 toate_variantele,
@@ -787,31 +787,31 @@ with tab_analiza:
                 top_evergreen = variante_evergreen[0]
                 
                 col1.metric(
-                    "đĽ Cea mai stabilÄ",
+                    "🥇 Cea mai stabilă",
                     f"ID: {top_evergreen['id']}",
                     f"Scor: {top_evergreen['scor_evergreen']:.2f}"
                 )
                 
                 col2.metric(
-                    "đ Stabilitate Cross",
+                    "📊 Stabilitate Cross",
                     f"{top_evergreen['stabilitate_cross']:.3f}",
-                    "ConsistenČÄ ĂŽntre perioade"
+                    "Consistență între perioade"
                 )
                 
                 col3.metric(
-                    "âď¸ DiferenČÄ perioade",
+                    "⚖️ Diferență perioade",
                     f"{top_evergreen['diferenta_perioade']:.3f}",
                     "Mai mic = Mai stabil"
                 )
                 
                 col4.metric(
-                    "â Variante validate",
+                    "✅ Variante validate",
                     len(variante_evergreen),
                     "Stabile pe termen lung"
                 )
                 
                 # Top 10 variante evergreen
-                st.subheader("đ Top 10 Variante pentru Joc pe Termen Lung")
+                st.subheader("🏆 Top 10 Variante pentru Joc pe Termen Lung")
                 
                 for i, var in enumerate(variante_evergreen[:10], 1):
                     with st.expander(f"#{i} - {var['id']} - Scor Evergreen: {var['scor_evergreen']:.2f}"):
@@ -831,12 +831,12 @@ with tab_analiza:
                             
                             media_test = np.mean(potriviri_test)
                             st.metric("Media ultimele 20", f"{media_test:.2f}")
-                            st.metric("ConsistenČÄ", f"{1/(np.std(potriviri_test)+0.1):.2f}")
+                            st.metric("Consistență", f"{1/(np.std(potriviri_test)+0.1):.2f}")
         
         st.divider()
         
-        # ANALIZA COMPARATIVÄ CHENARE - FOCUS STABILITATE
-        st.subheader("đ Analiza Chenare - Prioritate STABILITATE")
+        # ANALIZA COMPARATIVĂ CHENARE - FOCUS STABILITATE
+        st.subheader("📈 Analiza Chenare - Prioritate STABILITATE")
         
         # Hash pentru cache
         data_hash = calculeaza_hash_date(
@@ -847,25 +847,25 @@ with tab_analiza:
         # Verificare cache sau calcul nou
         if data_hash in st.session_state.rezultate_cache:
             rezultate_analiza = st.session_state.rezultate_cache[data_hash]
-            st.info("đ Date ĂŽncÄrcate din cache pentru performanČÄ")
+            st.info("📌 Date încărcate din cache pentru performanță")
         else:
-            with st.spinner("đ Analizez datele... Acest proces poate dura cĂ˘teva secunde."):
-                # AnalizÄ chenare
+            with st.spinner("🔄 Analizez datele... Acest proces poate dura câteva secunde."):
+                # Analiză chenare
                 rezultate_analiza = analizeaza_chenare_comparativ(
                     toate_variantele,
                     st.session_state.runde,
                     numar_minim
                 )
                 
-                # Salvare ĂŽn cache
+                # Salvare în cache
                 st.session_state.rezultate_cache[data_hash] = rezultate_analiza
         
         # Dashboard cu metrici principale
-        st.subheader("đ Dashboard Principal")
+        st.subheader("📈 Dashboard Principal")
         
         col1, col2, col3, col4 = st.columns(4)
         
-        # Identificare cel mai bun chenar pentru fiecare metricÄ
+        # Identificare cel mai bun chenar pentru fiecare metrică
         chenare_active = [k for k, v in rezultate_analiza.items() if v['variante']]
         
         if chenare_active:
@@ -877,49 +877,49 @@ with tab_analiza:
             
             with col1:
                 st.metric(
-                    "đ Cel mai profitabil",
+                    "🏆 Cel mai profitabil",
                     best_castiguri.replace('_', ' ').title(),
-                    f"{rezultate_analiza[best_castiguri]['total_castiguri']} cĂ˘Čtiguri"
+                    f"{rezultate_analiza[best_castiguri]['total_castiguri']} câștiguri"
                 )
             
             with col2:
                 st.metric(
-                    "đ Acoperire maximÄ",
+                    "📊 Acoperire maximă",
                     best_acoperire.replace('_', ' ').title(),
                     f"{rezultate_analiza[best_acoperire].get('acoperire_procent', 0):.1f}%"
                 )
             
             with col3:
                 st.metric(
-                    "âď¸ Cea mai stabilÄ",
+                    "⚖️ Cea mai stabilă",
                     best_stabilitate.replace('_', ' ').title(),
                     f"Stabilitate: {rezultate_analiza[best_stabilitate]['stabilitate_medie']:.2f}"
                 )
             
             with col4:
                 st.metric(
-                    "âĄ Cea mai eficientÄ",
+                    "⚡ Cea mai eficientă",
                     best_eficienta.replace('_', ' ').title(),
-                    f"EficienČÄ: {rezultate_analiza[best_eficienta]['eficienta_medie']:.3f}"
+                    f"Eficiență: {rezultate_analiza[best_eficienta]['eficienta_medie']:.3f}"
                 )
         
         st.divider()
         
         # Tabel comparativ chenare
-        st.subheader("đ ComparaČie DetaliatÄ Chenare")
+        st.subheader("📋 Comparație Detaliată Chenare")
         
         if chenare_active:
-            # Creare DataFrame pentru comparaČie
+            # Creare DataFrame pentru comparație
             date_comparatie = []
             for chenar in chenare_active:
                 rez = rezultate_analiza[chenar]
                 date_comparatie.append({
                     'Chenar': chenar.replace('_', ' ').title(),
                     'Variante': len(rez['variante']),
-                    'CĂ˘Čtiguri Totale': rez['total_castiguri'],
+                    'Câștiguri Totale': rez['total_castiguri'],
                     'Acoperire (%)': round(rez.get('acoperire_procent', 0), 2),
                     'Stabilitate': round(rez['stabilitate_medie'], 2),
-                    'EficienČÄ': round(rez['eficienta_medie'], 3),
+                    'Eficiență': round(rez['eficienta_medie'], 3),
                     'Runde Acoperite': len(rez['acoperire_runde'])
                 })
             
@@ -927,19 +927,19 @@ with tab_analiza:
             
             # Stil pentru tabel
             st.dataframe(
-                df_comparatie.style.highlight_max(axis=0, subset=['CĂ˘Čtiguri Totale', 'Acoperire (%)', 'Stabilitate', 'EficienČÄ']),
+                df_comparatie.style.highlight_max(axis=0, subset=['Câștiguri Totale', 'Acoperire (%)', 'Stabilitate', 'Eficiență']),
                 use_container_width=True
             )
         
         # Grafice
         if show_charts and chenare_active:
             st.divider()
-            st.subheader("đ VizualizÄri Interactive")
+            st.subheader("📊 Vizualizări Interactive")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                # Grafic distribuČie cĂ˘Čtiguri
+                # Grafic distribuție câștiguri
                 fig_castiguri = go.Figure()
                 for chenar in chenare_active:
                     rez = rezultate_analiza[chenar]
@@ -957,17 +957,17 @@ with tab_analiza:
                     ))
                 
                 fig_castiguri.update_layout(
-                    title="DistribuČie CĂ˘Čtiguri pe Chenare",
+                    title="Distribuție Câștiguri pe Chenare",
                     xaxis_title="Tip Potrivire",
-                    yaxis_title="NumÄr",
+                    yaxis_title="Număr",
                     barmode='group',
                     height=400
                 )
                 st.plotly_chart(fig_castiguri, use_container_width=True)
             
             with col2:
-                # Grafic radar pentru comparaČie metrici
-                categorii = ['CĂ˘Čtiguri', 'Acoperire', 'Stabilitate', 'EficienČÄ', 'Diversitate']
+                # Grafic radar pentru comparație metrici
+                categorii = ['Câștiguri', 'Acoperire', 'Stabilitate', 'Eficiență', 'Diversitate']
                 
                 fig_radar = go.Figure()
                 
@@ -980,7 +980,7 @@ with tab_analiza:
                         rez.get('acoperire_procent', 0),
                         rez['stabilitate_medie'] * 20,  # Scalat
                         rez['eficienta_medie'] * 100,  # Scalat
-                        len(rez['numere_frecvente']) / 2  # Diversitate normalizatÄ
+                        len(rez['numere_frecvente']) / 2  # Diversitate normalizată
                     ]
                     
                     fig_radar.add_trace(go.Scatterpolar(
@@ -997,25 +997,25 @@ with tab_analiza:
                             range=[0, 100]
                         )),
                     showlegend=True,
-                    title="ComparaČie MultidimensionalÄ",
+                    title="Comparație Multidimensională",
                     height=400
                 )
                 st.plotly_chart(fig_radar, use_container_width=True)
         
-        # Heatmap pentru performanČÄ
+        # Heatmap pentru performanță
         if show_heatmap and chenare_active:
             st.divider()
-            st.subheader("đşď¸ Heatmap PerformanČÄ Variante")
+            st.subheader("🗺️ Heatmap Performanță Variante")
             
             # Selectare chenar pentru heatmap
             chenar_selectat = st.selectbox(
-                "SelecteazÄ chenar pentru heatmap:",
+                "Selectează chenar pentru heatmap:",
                 chenare_active,
                 format_func=lambda x: x.replace('_', ' ').title()
             )
             
             if chenar_selectat and rezultate_analiza[chenar_selectat]['variante']:
-                # PregÄtire date pentru heatmap
+                # Pregătire date pentru heatmap
                 variante_chenar = rezultate_analiza[chenar_selectat]['variante'][:20]  # Top 20
                 
                 # Creare matrice pentru heatmap
@@ -1038,7 +1038,7 @@ with tab_analiza:
                 ))
                 
                 fig_heatmap.update_layout(
-                    title=f"Heatmap PerformanČÄ - {chenar_selectat.replace('_', ' ').title()} (Top 20 variante)",
+                    title=f"Heatmap Performanță - {chenar_selectat.replace('_', ' ').title()} (Top 20 variante)",
                     xaxis_title="Runde",
                     yaxis_title="Variante",
                     height=600
@@ -1048,23 +1048,23 @@ with tab_analiza:
         
         # Top Variante Globale
         st.divider()
-        st.subheader("đ Top Variante Performante")
+        st.subheader("🌟 Top Variante Performante")
         
         # Agregare toate variantele cu metrici
         toate_variantele_metrici = []
         for chenar in chenare_active:
             toate_variantele_metrici.extend(rezultate_analiza[chenar]['variante'])
         
-        # Sortare dupÄ scor
+        # Sortare după scor
         toate_variantele_metrici.sort(key=lambda x: x['scor'], reverse=True)
         
-        # Selectare numÄr de variante de afiČat
-        nr_top = st.slider("NumÄr variante top:", 10, 1000, 100, 10)
+        # Selectare număr de variante de afișat
+        nr_top = st.slider("Număr variante top:", 10, 1000, 100, 10)
         
         top_variante = toate_variantele_metrici[:nr_top]
         
         if top_variante:
-            # AfiČare metrici pentru top variante
+            # Afișare metrici pentru top variante
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -1074,13 +1074,13 @@ with tab_analiza:
                 st.metric("Scor Mediu", f"{avg_scor:.2f}")
             with col3:
                 max_castiguri = max(v['castiguri'] for v in top_variante)
-                st.metric("Max CĂ˘Čtiguri", max_castiguri)
+                st.metric("Max Câștiguri", max_castiguri)
             with col4:
                 avg_stabilitate = np.mean([v['stabilitate'] for v in top_variante])
                 st.metric("Stabilitate Medie", f"{avg_stabilitate:.2f}")
             
             # Tabel cu top variante
-            with st.expander(f"đ Vezi Top {len(top_variante)} Variante", expanded=False):
+            with st.expander(f"📋 Vezi Top {len(top_variante)} Variante", expanded=False):
                 date_top = []
                 for i, var in enumerate(top_variante, 1):
                     date_top.append({
@@ -1089,9 +1089,9 @@ with tab_analiza:
                         'Chenar': var['chenar'],
                         'Numere': ', '.join(map(str, var['numere'])),
                         'Scor': round(var['scor'], 2),
-                        'CĂ˘Čtiguri': var['castiguri'],
+                        'Câștiguri': var['castiguri'],
                         'Stabilitate': var['stabilitate'],
-                        'EficienČÄ': var['eficienta'],
+                        'Eficiență': var['eficienta'],
                         'Trend': var['trend']
                     })
                 
@@ -1106,59 +1106,59 @@ with tab_analiza:
                 # Export CSV
                 csv = df_top.to_csv(index=False)
                 st.download_button(
-                    label="đĽ DescarcÄ CSV",
+                    label="📥 Descarcă CSV",
                     data=csv,
                     file_name=f"top_{nr_top}_variante.csv",
                     mime="text/csv"
                 )
             
             with col2:
-                # Export JSON pentru analizÄ ulterioarÄ
+                # Export JSON pentru analiză ulterioară
                 json_data = json.dumps(top_variante, indent=2)
                 st.download_button(
-                    label="đĽ DescarcÄ JSON",
+                    label="📥 Descarcă JSON",
                     data=json_data,
                     file_name=f"analiza_completa_{nr_top}.json",
                     mime="application/json"
                 )
             
             with col3:
-                # Export doar numerele pentru utilizare rapidÄ
+                # Export doar numerele pentru utilizare rapidă
                 text_numere = "\n".join([
                     f"{var['id']}, {' '.join(map(str, var['numere']))}"
                     for var in top_variante
                 ])
                 st.download_button(
-                    label="đĽ DescarcÄ TXT",
+                    label="📥 Descarcă TXT",
                     data=text_numere,
                     file_name=f"variante_numere_{nr_top}.txt",
                     mime="text/plain"
                 )
 
 # ======================
-# TAB 3: COMBINARE INTELIGENTÄ
+# TAB 3: COMBINARE INTELIGENTĂ
 # ======================
 with tab_combinare:
-    st.header("đ Generator Set Stabil pentru Termen Lung")
+    st.header("🔄 Generator Set Stabil pentru Termen Lung")
     
     if not toate_variantele or not st.session_state.runde:
-        st.warning("â ď¸ AdaugÄ date pentru a genera variante combinate.")
+        st.warning("⚠️ Adaugă date pentru a genera variante combinate.")
     else:
         st.info("""
-        đŻ **Generator Set Stabil - Pentru Ani Ăntregi**
+        🎯 **Generator Set Stabil - Pentru Ani Întregi**
         
-        CreeazÄ un set de variante ULTRA-STABILE folosind:
-        - â Validare ĂŽncruciČatÄ pe perioade multiple
-        - â Testare rezistenČÄ la schimbÄri
-        - â Eliminare variante volatile
-        - â Focus 100% pe consistenČÄ vs jackpot-uri
+        Creează un set de variante ULTRA-STABILE folosind:
+        - ✅ Validare încrucișată pe perioade multiple
+        - ✅ Testare rezistență la schimbări
+        - ✅ Eliminare variante volatile
+        - ✅ Focus 100% pe consistență vs jackpot-uri
         """)
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
             nr_variante_set = st.number_input(
-                "MÄrime set stabil:",
+                "Mărime set stabil:",
                 min_value=5,
                 max_value=50,
                 value=15,
@@ -1167,7 +1167,7 @@ with tab_combinare:
         
         with col2:
             prag_stabilitate = st.slider(
-                "Prag stabilitate minimÄ:",
+                "Prag stabilitate minimă:",
                 min_value=3.0,
                 max_value=10.0,
                 value=5.0,
@@ -1180,10 +1180,10 @@ with tab_combinare:
                 ["Ultra-Stabil", "Echilibrat", "Defensiv"]
             )
         
-        if st.button("đ GenereazÄ SET STABIL pentru Ani Ăntregi", type="primary"):
+        if st.button("🚀 Generează SET STABIL pentru Ani Întregi", type="primary"):
             with st.spinner("Construiesc set ultra-stabil..."):
                 
-                # 1. IdentificÄ toate variantele evergreen
+                # 1. Identifică toate variantele evergreen
                 toate_var_unice = elimina_duplicate(toate_variantele)
                 variante_evergreen = identifica_variante_evergreen(
                     toate_var_unice,
@@ -1191,24 +1191,24 @@ with tab_combinare:
                     top_n=200
                 )
                 
-                # 2. Filtrare dupÄ prag stabilitate
+                # 2. Filtrare după prag stabilitate
                 variante_stabile = [
                     v for v in variante_evergreen 
                     if v['stabilitate_cross'] >= prag_stabilitate/10
                 ]
                 
                 if len(variante_stabile) < nr_variante_set:
-                    st.warning(f"â ď¸ Doar {len(variante_stabile)} variante ĂŽndeplinesc criteriile. Relaxez pragul...")
+                    st.warning(f"⚠️ Doar {len(variante_stabile)} variante îndeplinesc criteriile. Relaxez pragul...")
                     variante_stabile = variante_evergreen
                 
-                # 3. Selectare finalÄ set
+                # 3. Selectare finală set
                 set_final = variante_stabile[:nr_variante_set]
                 
-                # AfiČare rezultate
-                st.success(f"â Set de {len(set_final)} variante ULTRA-STABILE generat!")
+                # Afișare rezultate
+                st.success(f"✅ Set de {len(set_final)} variante ULTRA-STABILE generat!")
                 
                 # Statistici set
-                st.subheader("đ Analiza Setului Stabil")
+                st.subheader("📊 Analiza Setului Stabil")
                 
                 col1, col2, col3, col4 = st.columns(4)
                 
@@ -1223,13 +1223,13 @@ with tab_combinare:
                             castiguri_totale += 1
                             runde_acoperite.add(runda_idx)
                 
-                col1.metric("CĂ˘Čtiguri totale", castiguri_totale)
+                col1.metric("Câștiguri totale", castiguri_totale)
                 col2.metric("Acoperire runde", f"{len(runde_acoperite)/len(st.session_state.runde)*100:.1f}%")
                 col3.metric("Stabilitate medie", f"{np.mean([v['stabilitate_cross'] for v in set_final]):.3f}")
                 col4.metric("Cost set", f"{nr_variante_set} variante")
                 
                 # Export set final
-                st.subheader("đž SalveazÄ Setul TÄu Stabil")
+                st.subheader("💾 Salvează Setul Tău Stabil")
                 
                 # Format pentru export
                 text_export = "# SET STABIL PENTRU TERMEN LUNG\n"
@@ -1243,7 +1243,7 @@ with tab_combinare:
                 
                 with col1:
                     st.download_button(
-                        label="đĽ DescarcÄ Set Stabil TXT",
+                        label="📥 Descarcă Set Stabil TXT",
                         data=text_export,
                         file_name=f"set_stabil_{nr_variante_set}_variante.txt",
                         mime="text/plain"
@@ -1259,14 +1259,14 @@ with tab_combinare:
                     } for v in set_final], indent=2)
                     
                     st.download_button(
-                        label="đĽ DescarcÄ Detalii JSON",
+                        label="📥 Descarcă Detalii JSON",
                         data=json_export,
                         file_name=f"set_stabil_detaliat.json",
                         mime="application/json"
                     )
                 
-                # AfiČare variante
-                with st.expander("đ Vezi Variantele din Set"):
+                # Afișare variante
+                with st.expander("📋 Vezi Variantele din Set"):
                     for i, var in enumerate(set_final, 1):
                         st.text(f"{i:2d}. {var['id']}: {' '.join(map(str, var['numere']))} | Stabilitate: {var['stabilitate_cross']:.3f}")
 
@@ -1274,26 +1274,26 @@ with tab_combinare:
 # TAB 4: STRATEGIE 1150 VARIANTE PENTRU 4/4
 # ======================
 with tab_1150:
-    st.header("đŻ Strategie 1150 Variante - Acoperire MaximÄ 4/4")
+    st.header("🎯 Strategie 1150 Variante - Acoperire Maximă 4/4")
     
     if not st.session_state.runde:
-        st.warning("â ď¸ AdaugÄ runde pentru a genera setul de 1150 variante")
+        st.warning("⚠️ Adaugă runde pentru a genera setul de 1150 variante")
     else:
         st.info("""
-        **đ° Strategie SpecificÄ: 1150 Variante de 4 numere (1-66)**
+        **🎰 Strategie Specifică: 1150 Variante de 4 numere (1-66)**
         
-        Obiectiv: Cel puČin o variantÄ cu 4/4 la FIECARE rundÄ
+        Obiectiv: Cel puțin o variantă cu 4/4 la FIECARE rundă
         - Loterie cu numere 1-66
         - Variante de 4 numere
-        - Acoperire maximÄ folosind wheeling optimizat
-        - DistribuČie inteligentÄ pe numere frecvente
+        - Acoperire maximă folosind wheeling optimizat
+        - Distribuție inteligentă pe numere frecvente
         """)
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
             metoda = st.selectbox(
-                "MetodÄ generare:",
+                "Metodă generare:",
                 ["Wheeling Optimizat", "Triplete Frecvente", "Coverage Complet", "Hibrid Inteligent"]
             )
         
@@ -1303,7 +1303,7 @@ with tab_1150:
                 min_value=3,
                 max_value=5,
                 value=4,
-                help="4/4 = standard, 3/3 = mai uČor"
+                help="4/4 = standard, 3/3 = mai ușor"
             )
         
         with col3:
@@ -1315,21 +1315,21 @@ with tab_1150:
                 help="Ultimele X% runde pentru validare"
             )
         
-        if st.button("đ GENEREAZÄ 1150 VARIANTE OPTIME", type="primary"):
-            with st.spinner("Generez 1150 variante pentru acoperire maximÄ..."):
+        if st.button("🚀 GENEREAZĂ 1150 VARIANTE OPTIME", type="primary"):
+            with st.spinner("Generez 1150 variante pentru acoperire maximă..."):
                 
-                # AnalizÄ frecvenČe din istoric
+                # Analiză frecvențe din istoric
                 frecvente = Counter()
                 for runda in st.session_state.runde:
                     for num in runda:
                         frecvente[num] += 1
                 
-                # Split date pentru training Či test
+                # Split date pentru training și test
                 split_idx = int(len(st.session_state.runde) * (1 - test_split/100))
                 runde_training = st.session_state.runde[:split_idx]
                 runde_test = st.session_state.runde[split_idx:]
                 
-                # Generare variante dupÄ metodÄ
+                # Generare variante după metodă
                 if metoda == "Hibrid Inteligent":
                     variante_1150 = optimizeaza_pentru_1150(runde_training, 1150)
                 else:
@@ -1342,8 +1342,8 @@ with tab_1150:
                     target_potriviri
                 )
                 
-                # AfiČare rezultate
-                st.success("â 1150 variante generate cu succes!")
+                # Afișare rezultate
+                st.success("✅ 1150 variante generate cu succes!")
                 
                 # Metrici principale
                 col1, col2, col3, col4 = st.columns(4)
@@ -1355,22 +1355,22 @@ with tab_1150:
                 )
                 
                 # Simulare cost-benefit
-                cost_per_varianta = 1  # AjusteazÄ dupÄ nevoie
+                cost_per_varianta = 1  # Ajustează după nevoie
                 cost_total = 1150 * cost_per_varianta
-                castiguri_estimate = rezultate_acoperire['runde_acoperite'] * 50  # AjusteazÄ premiul
+                castiguri_estimate = rezultate_acoperire['runde_acoperite'] * 50  # Ajustează premiul
                 profit = castiguri_estimate - cost_total
                 
                 col2.metric("Cost Total", f"{cost_total} RON")
-                col3.metric("CĂ˘Čtiguri Estimate", f"{castiguri_estimate} RON")
+                col3.metric("Câștiguri Estimate", f"{castiguri_estimate} RON")
                 col4.metric("Profit Net", f"{profit} RON", f"{(profit/cost_total*100):.1f}% ROI" if cost_total > 0 else "N/A")
                 
-                # AnalizÄ detaliatÄ
-                st.subheader("đ AnalizÄ DetaliatÄ Acoperire")
+                # Analiză detaliată
+                st.subheader("📊 Analiză Detaliată Acoperire")
                 
                 # Grafic acoperire pe runde
                 fig_acoperire = go.Figure()
                 
-                # PregÄtire date pentru grafic
+                # Pregătire date pentru grafic
                 runde_labels = [f"R{i+1}" for i in range(len(runde_test))]
                 acoperite = [1 if d['acoperita'] else 0 for d in rezultate_acoperire['detalii']]
                 best_matches = [d['best_match'] for d in rezultate_acoperire['detalii']]
@@ -1405,7 +1405,7 @@ with tab_1150:
                 st.plotly_chart(fig_acoperire, use_container_width=True)
                 
                 # Top numere folosite
-                st.subheader("đ˘ DistribuČie Numere ĂŽn Set")
+                st.subheader("🔢 Distribuție Numere în Set")
                 
                 numere_folosite = Counter()
                 for var in variante_1150:
@@ -1422,22 +1422,22 @@ with tab_1150:
                 ))
                 
                 fig_distributie.update_layout(
-                    title="Top 30 Numere ĂŽn Setul de 1150",
-                    xaxis_title="NumÄr",
-                    yaxis_title="FrecvenČÄ ĂŽn variante",
+                    title="Top 30 Numere în Setul de 1150",
+                    xaxis_title="Număr",
+                    yaxis_title="Frecvență în variante",
                     height=300
                 )
                 
                 st.plotly_chart(fig_distributie, use_container_width=True)
                 
                 # Export 1150 variante
-                st.subheader("đž SalveazÄ Setul de 1150 Variante")
+                st.subheader("💾 Salvează Setul de 1150 Variante")
                 
-                # PregÄtire export
+                # Pregătire export
                 text_export = f"# SET 1150 VARIANTE DE 4 NUMERE (1-66)\n"
                 text_export += f"# Generat: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
                 text_export += f"# Acoperire pe test: {rezultate_acoperire['acoperire_procent']:.1f}%\n"
-                text_export += f"# MetodÄ: {metoda}\n\n"
+                text_export += f"# Metodă: {metoda}\n\n"
                 
                 for i, var in enumerate(variante_1150, 1):
                     text_export += f"V{i:04d}, {' '.join(map(str, var))}\n"
@@ -1446,42 +1446,42 @@ with tab_1150:
                 
                 with col1:
                     st.download_button(
-                        label="đĽ DescarcÄ 1150 Variante TXT",
+                        label="📥 Descarcă 1150 Variante TXT",
                         data=text_export,
                         file_name="set_1150_variante_4numere.txt",
                         mime="text/plain"
                     )
                 
                 with col2:
-                    # CSV pentru import ĂŽn Excel
+                    # CSV pentru import în Excel
                     csv_data = "ID,N1,N2,N3,N4\n"
                     for i, var in enumerate(variante_1150, 1):
                         csv_data += f"V{i:04d}," + ",".join(map(str, var)) + "\n"
                     
                     st.download_button(
-                        label="đĽ DescarcÄ CSV pentru Excel",
+                        label="📥 Descarcă CSV pentru Excel",
                         data=csv_data,
                         file_name="set_1150_variante.csv",
                         mime="text/csv"
                     )
                 
                 # Preview primele variante
-                with st.expander("đď¸ Vezi primele 50 variante"):
+                with st.expander("👁️ Vezi primele 50 variante"):
                     for i, var in enumerate(variante_1150[:50], 1):
                         st.text(f"{i:4d}. {' '.join(map(str, var))}")
                 
-                # Salvare ĂŽn session pentru analizÄ ulterioarÄ
+                # Salvare în session pentru analiză ulterioară
                 st.session_state['set_1150'] = variante_1150
                 st.session_state['acoperire_1150'] = rezultate_acoperire
     else:
         st.info("""
-        đŻ **Sistem de Combinare InteligentÄ**
+        🎯 **Sistem de Combinare Inteligentă**
         
-        Acest modul analizeazÄ cele mai performante variante Či genereazÄ combinaČii optime folosind:
-        - Analiza frecvenČei numerelor cĂ˘ČtigÄtoare
-        - Ponderea scorurilor de performanČÄ
-        - Diversificare pentru acoperire maximÄ
-        - Echilibrare ĂŽntre stabilitate Či potenČial de cĂ˘Čtig
+        Acest modul analizează cele mai performante variante și generează combinații optime folosind:
+        - Analiza frecvenței numerelor câștigătoare
+        - Ponderea scorurilor de performanță
+        - Diversificare pentru acoperire maximă
+        - Echilibrare între stabilitate și potențial de câștig
         """)
         
         # Parametri pentru generare
@@ -1489,14 +1489,14 @@ with tab_1150:
         
         with col1:
             nr_numere_combinat = st.number_input(
-                "NumÄr de numere per variantÄ:",
+                "Număr de numere per variantă:",
                 min_value=3,
                 max_value=10,
                 value=6
             )
             
             nr_variante_analiza = st.slider(
-                "AnalizeazÄ top X variante:",
+                "Analizează top X variante:",
                 min_value=10,
                 max_value=200,
                 value=50,
@@ -1506,14 +1506,14 @@ with tab_1150:
         with col2:
             strategie = st.selectbox(
                 "Strategie de combinare:",
-                ["EchilibratÄ", "AgresivÄ (Scor Maxim)", "Conservatoare (Stabilitate)", "DiversificatÄ"]
+                ["Echilibrată", "Agresivă (Scor Maxim)", "Conservatoare (Stabilitate)", "Diversificată"]
             )
             
             include_trend = st.checkbox("Include analiza de trend", value=True)
         
-        if st.button("đ GenereazÄ Variante Combinate", type="primary"):
+        if st.button("🚀 Generează Variante Combinate", type="primary"):
             with st.spinner("Generez variante optime..."):
-                # ObČine toate variantele cu metrici
+                # Obține toate variantele cu metrici
                 toate_metrici = []
                 for chenar in st.session_state.variante:
                     if st.session_state.variante[chenar]:
@@ -1528,14 +1528,14 @@ with tab_1150:
                         )
                         toate_metrici.extend(metrici)
                 
-                # Sortare dupÄ strategie
-                if strategie == "AgresivÄ (Scor Maxim)":
+                # Sortare după strategie
+                if strategie == "Agresivă (Scor Maxim)":
                     toate_metrici.sort(key=lambda x: x['scor'], reverse=True)
                 elif strategie == "Conservatoare (Stabilitate)":
                     toate_metrici.sort(key=lambda x: x['stabilitate'], reverse=True)
-                elif strategie == "DiversificatÄ":
+                elif strategie == "Diversificată":
                     toate_metrici.sort(key=lambda x: x['total_potriviri'], reverse=True)
-                else:  # EchilibratÄ
+                else:  # Echilibrată
                     toate_metrici.sort(key=lambda x: x['scor'] * x['stabilitate'], reverse=True)
                 
                 # Generare variante combinate
@@ -1544,14 +1544,14 @@ with tab_1150:
                     nr_numere_combinat
                 )
                 
-                # AfiČare rezultate
-                st.success("â Variante combinate generate cu succes!")
+                # Afișare rezultate
+                st.success("✅ Variante combinate generate cu succes!")
                 
                 for nume, varianta in variante_combinate:
-                    with st.expander(f"đ˛ VariantÄ {nume}"):
+                    with st.expander(f"🎲 Variantă {nume}"):
                         st.subheader(f"Numere: {', '.join(map(str, sorted(varianta)))}")
                         
-                        # Verificare performanČÄ pe rundele existente
+                        # Verificare performanță pe rundele existente
                         potriviri = []
                         for runda in st.session_state.runde:
                             potriviri.append(len(set(varianta) & set(runda)))
@@ -1559,11 +1559,11 @@ with tab_1150:
                         castiguri = sum(1 for p in potriviri if p >= numar_minim)
                         
                         col1, col2, col3 = st.columns(3)
-                        col1.metric("CĂ˘Čtiguri simulate", castiguri)
+                        col1.metric("Câștiguri simulate", castiguri)
                         col2.metric("Potriviri medii", f"{np.mean(potriviri):.2f}")
                         col3.metric("Max potriviri", max(potriviri) if potriviri else 0)
                         
-                        # Mini grafic performanČÄ
+                        # Mini grafic performanță
                         if potriviri:
                             fig_mini = go.Figure()
                             fig_mini.add_trace(go.Scatter(
@@ -1573,9 +1573,9 @@ with tab_1150:
                                 line=dict(color='green', width=2)
                             ))
                             fig_mini.add_hline(y=numar_minim, line_dash="dash", 
-                                             annotation_text=f"Prag cĂ˘Čtig ({numar_minim})")
+                                             annotation_text=f"Prag câștig ({numar_minim})")
                             fig_mini.update_layout(
-                                title=f"PerformanČÄ pe ultimele {min(50, len(potriviri))} runde",
+                                title=f"Performanță pe ultimele {min(50, len(potriviri))} runde",
                                 xaxis_title="Runda",
                                 yaxis_title="Potriviri",
                                 height=300
@@ -1584,7 +1584,7 @@ with tab_1150:
                 
                 # Analiza numerelor frecvente
                 st.divider()
-                st.subheader("đ Analiza Numerelor din Top Variante")
+                st.subheader("📊 Analiza Numerelor din Top Variante")
                 
                 frecventa = Counter()
                 for var in toate_metrici[:nr_variante_analiza]:
@@ -1601,15 +1601,15 @@ with tab_1150:
                     marker_color='lightblue'
                 ))
                 fig_freq.update_layout(
-                    title=f"Top 20 Numere Frecvente ĂŽn Primele {nr_variante_analiza} Variante",
-                    xaxis_title="NumÄr",
-                    yaxis_title="FrecvenČÄ",
+                    title=f"Top 20 Numere Frecvente în Primele {nr_variante_analiza} Variante",
+                    xaxis_title="Număr",
+                    yaxis_title="Frecvență",
                     height=400
                 )
                 st.plotly_chart(fig_freq, use_container_width=True)
                 
-                # Matrice de corelaČie numere
-                st.subheader("đ Numere care apar frecvent ĂŽmpreunÄ")
+                # Matrice de corelație numere
+                st.subheader("🔗 Numere care apar frecvent împreună")
                 
                 perechi = Counter()
                 for var in toate_metrici[:nr_variante_analiza]:
@@ -1627,7 +1627,7 @@ with tab_1150:
                         st.caption(f"{n1}-{n2}: apare de {freq} ori")
                 
                 with col2:
-                    st.write("**RecomandÄri bazate pe perechi:**")
+                    st.write("**Recomandări bazate pe perechi:**")
                     # Sugestii bazate pe perechi frecvente
                     numere_recomandate = set()
                     for (n1, n2), _ in top_perechi[:5]:
@@ -1636,28 +1636,28 @@ with tab_1150:
                     st.info(f"Numere recomandate: {', '.join(map(str, sorted(numere_recomandate)))}")
 
 # ======================
-# TAB 5: PREDICČII
+# TAB 5: PREDICȚII
 # ======================
 with tab_predictii:
-    st.header("đŽ PredicČii Či AnalizÄ TendinČe")
+    st.header("🔮 Predicții și Analiză Tendințe")
     
     if not st.session_state.runde:
-        st.warning("â ď¸ AdaugÄ runde pentru analiza tendinČelor.")
+        st.warning("⚠️ Adaugă runde pentru analiza tendințelor.")
     else:
         st.info("""
-        đ **Modul Predictiv**
+        📈 **Modul Predictiv**
         
-        AnalizeazÄ pattern-uri istorice Či tendinČe pentru a identifica:
-        - Numere cu potenČial crescut de apariČie
-        - Cicluri Či pattern-uri recurente
-        - Perioade de "cÄldurÄ" Či "rÄcealÄ" pentru numere
-        - PredicČii bazate pe analiza statisticÄ
+        Analizează pattern-uri istorice și tendințe pentru a identifica:
+        - Numere cu potențial crescut de apariție
+        - Cicluri și pattern-uri recurente
+        - Perioade de "căldură" și "răceală" pentru numere
+        - Predicții bazate pe analiza statistică
         """)
         
-        # Analiza tendinČelor numerelor
-        st.subheader("đ Analiza FrecvenČei Či TendinČelor")
+        # Analiza tendințelor numerelor
+        st.subheader("📊 Analiza Frecvenței și Tendințelor")
         
-        # Calculare statistici pentru fiecare numÄr
+        # Calculare statistici pentru fiecare număr
         numere_stats = defaultdict(lambda: {
             'aparitii': 0,
             'ultima_aparitie': -1,
@@ -1680,7 +1680,7 @@ with tab_predictii:
             if numere_stats[num]['distante']:
                 numere_stats[num]['distanta_medie'] = np.mean(numere_stats[num]['distante'])
                 
-                # Calculare trend (ultimele 5 vs primele 5 apariČii)
+                # Calculare trend (ultimele 5 vs primele 5 apariții)
                 if len(numere_stats[num]['distante']) >= 5:
                     recent = np.mean(numere_stats[num]['distante'][-5:])
                     vechi = np.mean(numere_stats[num]['distante'][:5])
@@ -1688,9 +1688,9 @@ with tab_predictii:
         
         # Clasificare numere
         numere_fierbinti = []  # Apar frecvent recent
-        numere_reci = []       # Nu au apÄrut de mult
+        numere_reci = []       # Nu au apărut de mult
         numere_echilibrate = [] # Apar constant
-        numere_emergente = []   # Trend crescÄtor
+        numere_emergente = []   # Trend crescător
         
         total_runde = len(st.session_state.runde)
         
@@ -1708,53 +1708,53 @@ with tab_predictii:
                 if 8 <= stats['distanta_medie'] <= 12:
                     numere_echilibrate.append((num, stats))
         
-        # AfiČare clasificare
+        # Afișare clasificare
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.markdown("### đĽ Numere FierbinČi")
+            st.markdown("### 🔥 Numere Fierbinți")
             st.caption("Apar frecvent recent")
             for num, stats in sorted(numere_fierbinti, key=lambda x: x[1]['aparitii'], reverse=True)[:5]:
                 st.write(f"**{num}** - {stats['aparitii']}x")
         
         with col2:
-            st.markdown("### âď¸ Numere Reci")
-            st.caption("Nu au apÄrut recent")
+            st.markdown("### ❄️ Numere Reci")
+            st.caption("Nu au apărut recent")
             for num, stats in sorted(numere_reci, key=lambda x: total_runde - x[1]['ultima_aparitie'] - 1, reverse=True)[:5]:
                 rounds_ago = total_runde - stats['ultima_aparitie'] - 1
                 st.write(f"**{num}** - acum {rounds_ago} runde")
         
         with col3:
-            st.markdown("### đ Emergente")
-            st.caption("Trend crescÄtor")
+            st.markdown("### 📈 Emergente")
+            st.caption("Trend crescător")
             for num, stats in sorted(numere_emergente, key=lambda x: x[1]['trend'], reverse=True)[:5]:
                 st.write(f"**{num}** - trend: +{stats['trend']:.1f}")
         
         with col4:
-            st.markdown("### âď¸ Echilibrate")
+            st.markdown("### ⚖️ Echilibrate")
             st.caption("Apar constant")
             for num, stats in sorted(numere_echilibrate, key=lambda x: x[1]['aparitii'], reverse=True)[:5]:
                 st.write(f"**{num}** - la ~{stats['distanta_medie']:.0f} runde")
         
         st.divider()
         
-        # Grafic istoric pentru numÄr selectat
-        st.subheader("đ AnalizÄ DetaliatÄ NumÄr")
+        # Grafic istoric pentru număr selectat
+        st.subheader("🔍 Analiză Detaliată Număr")
         
         numere_disponibile = sorted(list(numere_stats.keys()))
-        numar_selectat = st.selectbox("SelecteazÄ numÄr pentru analizÄ:", numere_disponibile)
+        numar_selectat = st.selectbox("Selectează număr pentru analiză:", numere_disponibile)
         
         if numar_selectat:
             stats_numar = numere_stats[numar_selectat]
             
             col1, col2, col3, col4 = st.columns(4)
             
-            col1.metric("Total apariČii", stats_numar['aparitii'])
-            col2.metric("Ultima apariČie", f"Runda {stats_numar['ultima_aparitie']+1}")
-            col3.metric("DistanČÄ medie", f"{stats_numar['distanta_medie']:.1f}" if stats_numar['distanta_medie'] else "N/A")
+            col1.metric("Total apariții", stats_numar['aparitii'])
+            col2.metric("Ultima apariție", f"Runda {stats_numar['ultima_aparitie']+1}")
+            col3.metric("Distanță medie", f"{stats_numar['distanta_medie']:.1f}" if stats_numar['distanta_medie'] else "N/A")
             col4.metric("Trend", f"{stats_numar['trend']:+.2f}" if stats_numar['trend'] else "0")
             
-            # Grafic apariČii ĂŽn timp
+            # Grafic apariții în timp
             aparitii_timp = []
             for idx, runda in enumerate(st.session_state.runde):
                 if numar_selectat in runda:
@@ -1762,7 +1762,7 @@ with tab_predictii:
                 else:
                     aparitii_timp.append(0)
             
-            # Calcul medie mobilÄ
+            # Calcul medie mobilă
             window = min(10, len(aparitii_timp) // 4)
             if window > 0:
                 medie_mobila = pd.Series(aparitii_timp).rolling(window=window, center=True).mean()
@@ -1771,45 +1771,45 @@ with tab_predictii:
             
             fig_istoric = go.Figure()
             
-            # Bare pentru apariČii
+            # Bare pentru apariții
             fig_istoric.add_trace(go.Bar(
                 y=aparitii_timp,
-                name='ApariČii',
+                name='Apariții',
                 marker_color=['green' if x else 'lightgray' for x in aparitii_timp],
                 opacity=0.6
             ))
             
-            # Linie pentru medie mobilÄ
+            # Linie pentru medie mobilă
             fig_istoric.add_trace(go.Scatter(
                 y=medie_mobila,
                 mode='lines',
-                name=f'Medie mobilÄ ({window} runde)',
+                name=f'Medie mobilă ({window} runde)',
                 line=dict(color='red', width=2)
             ))
             
             fig_istoric.update_layout(
-                title=f"Istoric apariČii pentru numÄrul {numar_selectat}",
+                title=f"Istoric apariții pentru numărul {numar_selectat}",
                 xaxis_title="Runda",
-                yaxis_title="ApariČie",
+                yaxis_title="Apariție",
                 height=400,
                 showlegend=True
             )
             
             st.plotly_chart(fig_istoric, use_container_width=True)
         
-        # PredicČii sugerate
+        # Predicții sugerate
         st.divider()
-        st.subheader("đŻ Sugestii Predictive")
+        st.subheader("🎯 Sugestii Predictive")
         
-        # Generare sugestii bazate pe analizÄ
+        # Generare sugestii bazate pe analiză
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.markdown("### đĄ Set Echilibrat")
-            st.caption("Mix ĂŽntre fierbinte Či rece")
+            st.markdown("### 💡 Set Echilibrat")
+            st.caption("Mix între fierbinte și rece")
             
             set_echilibrat = []
-            # 2 fierbinČi
+            # 2 fierbinți
             for num, _ in numere_fierbinti[:2]:
                 set_echilibrat.append(num)
             # 2 reci
@@ -1822,14 +1822,14 @@ with tab_predictii:
             if len(set_echilibrat) >= 6:
                 st.success(f"Numere sugerate: {', '.join(map(str, sorted(set_echilibrat[:6])))}")
             else:
-                st.info("Date insuficiente pentru predicČie")
+                st.info("Date insuficiente pentru predicție")
         
         with col2:
-            st.markdown("### đ Set Agresiv")
+            st.markdown("### 🚀 Set Agresiv")
             st.caption("Focus pe numere emergente")
             
             set_agresiv = []
-            # Emergente Či fierbinČi
+            # Emergente și fierbinți
             for num, _ in numere_emergente[:3]:
                 set_agresiv.append(num)
             for num, _ in numere_fierbinti[:3]:
@@ -1839,13 +1839,13 @@ with tab_predictii:
             if len(set_agresiv) >= 6:
                 st.success(f"Numere sugerate: {', '.join(map(str, sorted(set_agresiv[:6])))}")
             else:
-                st.info("Date insuficiente pentru predicČie")
+                st.info("Date insuficiente pentru predicție")
         
         with col3:
-            st.markdown("### đĄď¸ Set Conservator")
+            st.markdown("### 🛡️ Set Conservator")
             st.caption("Numere cu istoric solid")
             
-            # Top numere dupÄ frecvenČÄ totalÄ
+            # Top numere după frecvență totală
             numere_frecvente = sorted(
                 [(num, stats['aparitii']) for num, stats in numere_stats.items()],
                 key=lambda x: x[1],
@@ -1857,17 +1857,17 @@ with tab_predictii:
             if set_conservator:
                 st.success(f"Numere sugerate: {', '.join(map(str, sorted(set_conservator)))}")
             else:
-                st.info("Date insuficiente pentru predicČie")
+                st.info("Date insuficiente pentru predicție")
         
         # Avertisment
         st.warning("""
-        â ď¸ **Disclaimer Important**
+        ⚠️ **Disclaimer Important**
         
-        Aceste predicČii sunt bazate pe analizÄ statisticÄ istoricÄ Či NU garanteazÄ rezultate.
-        Loteria este un joc de noroc Či fiecare extragere este independentÄ.
-        JucaČi responsabil!
+        Aceste predicții sunt bazate pe analiză statistică istorică și NU garantează rezultate.
+        Loteria este un joc de noroc și fiecare extragere este independentă.
+        Jucați responsabil!
         """)
 
 # Footer
 st.divider()
-st.caption("đ° AnalizÄ Loterie AvansatÄ | Dezvoltat pentru performanČÄ maximÄ | JucaČi responsabil!")
+st.caption("🎰 Analiză Loterie Avansată | Dezvoltat pentru performanță maximă | Jucați responsabil!")
