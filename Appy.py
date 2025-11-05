@@ -716,7 +716,7 @@ with tab_analiza:
         toate_variantele_metrici.sort(key=lambda x: x['scor'], reverse=True)
         
         # Selectare număr de variante de afișat
-        nr_top = st.slider("Număr variante top:", 10, 1000, 100, 10, 1155)
+        nr_top = st.slider("Număr variante top:", 10, 1000, 100, 10, 1155, 10)
         
         top_variante = toate_variantele_metrici[:nr_top]
         
