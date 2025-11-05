@@ -7,6 +7,7 @@ import plotly.express as px
 from datetime import datetime
 import hashlib
 import json
+from itertools import combinations
 
 # Configurare pagină
 st.set_page_config(
@@ -333,7 +334,6 @@ def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_var
     core_numbers = list(numere_frecvente.keys())[:35]
     
     # 2. Generare combinații cu overlap strategic pentru 4 numere
-    from itertools import combinations
     
     # Prima parte: combinații dense din top 20 (C(20,4) = 4845)
     combos_top = list(combinations(core_numbers[:20], 4))
@@ -452,7 +452,7 @@ def optimizeaza_pentru_1150(runde_istorice, nr_variante=1150):
         # Găsește număr frecvent care nu e în triplet
         candidati = [n for n in frecvente.keys() if n not in base and 1 <= n <= 66][:20]
         if candidati:
-            completare = np.random.choice(candidati, 1)
+            completare = np.random.choice(candidati, 1)[0] # Am scos [0] de la np.random.choice
             variante.append(sorted(base + [completare]))
     
     # 35% bazate pe perechi frecvente + 2 numere
@@ -472,13 +472,19 @@ def optimizeaza_pentru_1150(runde_istorice, nr_variante=1150):
     
     return variante[:nr_variante]
 
-def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_varianta=6):
+
+# --- CORECTURĂ ---
+# Am redenumit funcția din 'genereaza_acoperire_maxima_44' în 'genereaza_varianta_combinata'
+# Am corectat parametrii (top_variante, nr_numere)
+# Am corectat variabilele interne (top_variante[:50] -> top_variante, marime_varianta -> nr_numere)
+# Această funcție ar fi cauzat 'NameError'
+def genereaza_varianta_combinata(top_variante, nr_numere):
     """Generează o variantă optimă combinând cele mai bune elemente"""
     # Analiză frecvență numere din top variante
     frecventa_numere = Counter()
     scoruri_numere = defaultdict(float)
     
-    for var in top_variante[:50]:  # Analizăm top 50
+    for var in top_variante:  # Analizăm toate variantele primite
         for num in var['numere']:
             frecventa_numere[num] += 1
             scoruri_numere[num] += var['scor'] / len(var['numere'])
@@ -518,7 +524,7 @@ def genereaza_acoperire_maxima_44(numere_frecvente, nr_variante=1150, marime_var
     variante_combinate.append(('Diversificată', var2[:nr_numere]))
     
     # Varianta 3: Echilibrată (mix între frecvență și stabilitate)
-    top_stabile = sorted(top_variante[:100], key=lambda x: x['stabilitate'], reverse=True)[:20]
+    top_stabile = sorted(top_variante, key=lambda x: x['stabilitate'], reverse=True)[:20]
     numere_stabile = Counter()
     for var in top_stabile:
         for num in var['numere']:
@@ -1270,6 +1276,175 @@ with tab_combinare:
                     for i, var in enumerate(set_final, 1):
                         st.text(f"{i:2d}. {var['id']}: {' '.join(map(str, var['numere']))} | Stabilitate: {var['stabilitate_cross']:.3f}")
 
+        # --- CORECTURĂ ---
+        # Am adăugat un separator și am mutat codul de mai jos
+        # (care era orfan după `with tab_1150:`) AICI, unde îi este locul.
+        st.divider()
+        
+        st.info("""
+        🎯 **Sistem de Combinare Inteligentă**
+        
+        Acest modul analizează cele mai performante variante și generează combinații optime folosind:
+        - Analiza frecvenței numerelor câștigătoare
+        - Ponderea scorurilor de performanță
+        - Diversificare pentru acoperire maximă
+        - Echilibrare între stabilitate și potențial de câștig
+        """)
+        
+        # Parametri pentru generare
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            nr_numere_combinat = st.number_input(
+                "Număr de numere per variantă:",
+                min_value=3,
+                max_value=10,
+                value=6
+            )
+            
+            nr_variante_analiza = st.slider(
+                "Analizează top X variante:",
+                min_value=10,
+                max_value=200,
+                value=50,
+                step=10
+            )
+        
+        with col2:
+            strategie = st.selectbox(
+                "Strategie de combinare:",
+                ["Echilibrată", "Agresivă (Scor Maxim)", "Conservatoare (Stabilitate)", "Diversificată"]
+            )
+            
+            include_trend = st.checkbox("Include analiza de trend", value=True)
+        
+        if st.button("🚀 Generează Variante Combinate", type="primary"):
+            with st.spinner("Generez variante optime..."):
+                # Obține toate variantele cu metrici
+                toate_metrici = []
+                for chenar in st.session_state.variante:
+                    if st.session_state.variante[chenar]:
+                        rezultate = verifica_varianta_batch(
+                            st.session_state.variante[chenar],
+                            st.session_state.runde
+                        )
+                        metrici = calculeaza_metrici_avansate(
+                            rezultate,
+                            st.session_state.runde,
+                            numar_minim
+                        )
+                        toate_metrici.extend(metrici)
+                
+                # Sortare după strategie
+                if strategie == "Agresivă (Scor Maxim)":
+                    toate_metrici.sort(key=lambda x: x['scor'], reverse=True)
+                elif strategie == "Conservatoare (Stabilitate)":
+                    toate_metrici.sort(key=lambda x: x['stabilitate'], reverse=True)
+                elif strategie == "Diversificată":
+                    toate_metrici.sort(key=lambda x: x['total_potriviri'], reverse=True)
+                else:  # Echilibrată
+                    toate_metrici.sort(key=lambda x: x['scor'] * x['stabilitate'], reverse=True)
+                
+                # Generare variante combinate
+                # --- CORECTURĂ ---
+                # Aici era apelul la funcția 'genereaza_varianta_combinata'
+                # care acum va funcționa corect datorită reparației de la linia ~295
+                variante_combinate = genereaza_varianta_combinata(
+                    toate_metrici[:nr_variante_analiza],
+                    nr_numere_combinat
+                )
+                
+                # Afișare rezultate
+                st.success("✅ Variante combinate generate cu succes!")
+                
+                for nume, varianta in variante_combinate:
+                    with st.expander(f"🎲 Variantă {nume}"):
+                        st.subheader(f"Numere: {', '.join(map(str, sorted(varianta)))}")
+                        
+                        # Verificare performanță pe rundele existente
+                        potriviri = []
+                        for runda in st.session_state.runde:
+                            potriviri.append(len(set(varianta) & set(runda)))
+                        
+                        castiguri = sum(1 for p in potriviri if p >= numar_minim)
+                        
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Câștiguri simulate", castiguri)
+                        col2.metric("Potriviri medii", f"{np.mean(potriviri):.2f}")
+                        col3.metric("Max potriviri", max(potriviri) if potriviri else 0)
+                        
+                        # Mini grafic performanță
+                        if potriviri:
+                            fig_mini = go.Figure()
+                            fig_mini.add_trace(go.Scatter(
+                                y=potriviri[:50],  # Primele 50 de runde
+                                mode='lines+markers',
+                                name='Potriviri',
+                                line=dict(color='green', width=2)
+                            ))
+                            fig_mini.add_hline(y=numar_minim, line_dash="dash", 
+                                             annotation_text=f"Prag câștig ({numar_minim})")
+                            fig_mini.update_layout(
+                                title=f"Performanță pe ultimele {min(50, len(potriviri))} runde",
+                                xaxis_title="Runda",
+                                yaxis_title="Potriviri",
+                                height=300
+                            )
+                            st.plotly_chart(fig_mini, use_container_width=True)
+                
+                # Analiza numerelor frecvente
+                st.divider()
+                st.subheader("📊 Analiza Numerelor din Top Variante")
+                
+                frecventa = Counter()
+                for var in toate_metrici[:nr_variante_analiza]:
+                    for num in var['numere']:
+                        frecventa[num] += 1
+                
+                # Top 20 cele mai frecvente numere
+                top_numere = frecventa.most_common(20)
+                
+                fig_freq = go.Figure()
+                fig_freq.add_trace(go.Bar(
+                    x=[str(num) for num, _ in top_numere],
+                    y=[freq for _, freq in top_numere],
+                    marker_color='lightblue'
+                ))
+                fig_freq.update_layout(
+                    title=f"Top 20 Numere Frecvente în Primele {nr_variante_analiza} Variante",
+                    xaxis_title="Număr",
+                    yaxis_title="Frecvență",
+                    height=400
+                )
+                st.plotly_chart(fig_freq, use_container_width=True)
+                
+                # Matrice de corelație numere
+                st.subheader("🔗 Numere care apar frecvent împreună")
+                
+                perechi = Counter()
+                for var in toate_metrici[:nr_variante_analiza]:
+                    numere = sorted(var['numere'])
+                    for i in range(len(numere)):
+                        for j in range(i+1, len(numere)):
+                            perechi[(numere[i], numere[j])] += 1
+                
+                top_perechi = perechi.most_common(10)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Top 10 Perechi Frecvente:**")
+                    for (n1, n2), freq in top_perechi:
+                        st.caption(f"{n1}-{n2}: apare de {freq} ori")
+                
+                with col2:
+                    st.write("**Recomandări bazate pe perechi:**")
+                    # Sugestii bazate pe perechi frecvente
+                    numere_recomandate = set()
+                    for (n1, n2), _ in top_perechi[:5]:
+                        numere_recomandate.add(n1)
+                        numere_recomandate.add(n2)
+                    st.info(f"Numere recomandate: {', '.join(map(str, sorted(numere_recomandate)))}")
+
 # ======================
 # TAB 4: STRATEGIE 1150 VARIANTE PENTRU 4/4
 # ======================
@@ -1473,167 +1648,6 @@ with tab_1150:
                 # Salvare în session pentru analiză ulterioară
                 st.session_state['set_1150'] = variante_1150
                 st.session_state['acoperire_1150'] = rezultate_acoperire
-    else:
-        st.info("""
-        🎯 **Sistem de Combinare Inteligentă**
-        
-        Acest modul analizează cele mai performante variante și generează combinații optime folosind:
-        - Analiza frecvenței numerelor câștigătoare
-        - Ponderea scorurilor de performanță
-        - Diversificare pentru acoperire maximă
-        - Echilibrare între stabilitate și potențial de câștig
-        """)
-        
-        # Parametri pentru generare
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            nr_numere_combinat = st.number_input(
-                "Număr de numere per variantă:",
-                min_value=3,
-                max_value=10,
-                value=6
-            )
-            
-            nr_variante_analiza = st.slider(
-                "Analizează top X variante:",
-                min_value=10,
-                max_value=200,
-                value=50,
-                step=10
-            )
-        
-        with col2:
-            strategie = st.selectbox(
-                "Strategie de combinare:",
-                ["Echilibrată", "Agresivă (Scor Maxim)", "Conservatoare (Stabilitate)", "Diversificată"]
-            )
-            
-            include_trend = st.checkbox("Include analiza de trend", value=True)
-        
-        if st.button("🚀 Generează Variante Combinate", type="primary"):
-            with st.spinner("Generez variante optime..."):
-                # Obține toate variantele cu metrici
-                toate_metrici = []
-                for chenar in st.session_state.variante:
-                    if st.session_state.variante[chenar]:
-                        rezultate = verifica_varianta_batch(
-                            st.session_state.variante[chenar],
-                            st.session_state.runde
-                        )
-                        metrici = calculeaza_metrici_avansate(
-                            rezultate,
-                            st.session_state.runde,
-                            numar_minim
-                        )
-                        toate_metrici.extend(metrici)
-                
-                # Sortare după strategie
-                if strategie == "Agresivă (Scor Maxim)":
-                    toate_metrici.sort(key=lambda x: x['scor'], reverse=True)
-                elif strategie == "Conservatoare (Stabilitate)":
-                    toate_metrici.sort(key=lambda x: x['stabilitate'], reverse=True)
-                elif strategie == "Diversificată":
-                    toate_metrici.sort(key=lambda x: x['total_potriviri'], reverse=True)
-                else:  # Echilibrată
-                    toate_metrici.sort(key=lambda x: x['scor'] * x['stabilitate'], reverse=True)
-                
-                # Generare variante combinate
-                variante_combinate = genereaza_varianta_combinata(
-                    toate_metrici[:nr_variante_analiza],
-                    nr_numere_combinat
-                )
-                
-                # Afișare rezultate
-                st.success("✅ Variante combinate generate cu succes!")
-                
-                for nume, varianta in variante_combinate:
-                    with st.expander(f"🎲 Variantă {nume}"):
-                        st.subheader(f"Numere: {', '.join(map(str, sorted(varianta)))}")
-                        
-                        # Verificare performanță pe rundele existente
-                        potriviri = []
-                        for runda in st.session_state.runde:
-                            potriviri.append(len(set(varianta) & set(runda)))
-                        
-                        castiguri = sum(1 for p in potriviri if p >= numar_minim)
-                        
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Câștiguri simulate", castiguri)
-                        col2.metric("Potriviri medii", f"{np.mean(potriviri):.2f}")
-                        col3.metric("Max potriviri", max(potriviri) if potriviri else 0)
-                        
-                        # Mini grafic performanță
-                        if potriviri:
-                            fig_mini = go.Figure()
-                            fig_mini.add_trace(go.Scatter(
-                                y=potriviri[:50],  # Primele 50 de runde
-                                mode='lines+markers',
-                                name='Potriviri',
-                                line=dict(color='green', width=2)
-                            ))
-                            fig_mini.add_hline(y=numar_minim, line_dash="dash", 
-                                             annotation_text=f"Prag câștig ({numar_minim})")
-                            fig_mini.update_layout(
-                                title=f"Performanță pe ultimele {min(50, len(potriviri))} runde",
-                                xaxis_title="Runda",
-                                yaxis_title="Potriviri",
-                                height=300
-                            )
-                            st.plotly_chart(fig_mini, use_container_width=True)
-                
-                # Analiza numerelor frecvente
-                st.divider()
-                st.subheader("📊 Analiza Numerelor din Top Variante")
-                
-                frecventa = Counter()
-                for var in toate_metrici[:nr_variante_analiza]:
-                    for num in var['numere']:
-                        frecventa[num] += 1
-                
-                # Top 20 cele mai frecvente numere
-                top_numere = frecventa.most_common(20)
-                
-                fig_freq = go.Figure()
-                fig_freq.add_trace(go.Bar(
-                    x=[str(num) for num, _ in top_numere],
-                    y=[freq for _, freq in top_numere],
-                    marker_color='lightblue'
-                ))
-                fig_freq.update_layout(
-                    title=f"Top 20 Numere Frecvente în Primele {nr_variante_analiza} Variante",
-                    xaxis_title="Număr",
-                    yaxis_title="Frecvență",
-                    height=400
-                )
-                st.plotly_chart(fig_freq, use_container_width=True)
-                
-                # Matrice de corelație numere
-                st.subheader("🔗 Numere care apar frecvent împreună")
-                
-                perechi = Counter()
-                for var in toate_metrici[:nr_variante_analiza]:
-                    numere = sorted(var['numere'])
-                    for i in range(len(numere)):
-                        for j in range(i+1, len(numere)):
-                            perechi[(numere[i], numere[j])] += 1
-                
-                top_perechi = perechi.most_common(10)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**Top 10 Perechi Frecvente:**")
-                    for (n1, n2), freq in top_perechi:
-                        st.caption(f"{n1}-{n2}: apare de {freq} ori")
-                
-                with col2:
-                    st.write("**Recomandări bazate pe perechi:**")
-                    # Sugestii bazate pe perechi frecvente
-                    numere_recomandate = set()
-                    for (n1, n2), _ in top_perechi[:5]:
-                        numere_recomandate.add(n1)
-                        numere_recomandate.add(n2)
-                    st.info(f"Numere recomandate: {', '.join(map(str, sorted(numere_recomandate)))}")
 
 # ======================
 # TAB 5: PREDICȚII
