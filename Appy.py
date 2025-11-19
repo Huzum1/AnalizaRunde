@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from collections import Counter
 import random
+import io
 
 # --- Configurare Pagină ---
 st.set_page_config(
@@ -14,17 +15,31 @@ st.set_page_config(
 st.title("⚖️ Echilibrare Frecvențe Variante (Limita N & K)")
 
 # --- Funcția de Procesare a Datelor ---
-def parse_input(input_text, min_numbers_per_variant):
-    """Parsează datele introduse manual."""
-    lines = [line.strip() for line in input_text.split('\n') if line.strip()]
+def parse_input(input_source, min_numbers_per_variant):
+    """Parsează datele introduse manual sau dintr-un fișier."""
     
+    # input_source poate fi un șir de caractere (text_area) sau conținutul unui fișier
+    if isinstance(input_source, str):
+        lines = [line.strip() for line in input_source.split('\n') if line.strip()]
+    elif isinstance(input_source, bytes):
+         # Decodare bytes la string
+        lines = [line.strip() for line in input_source.decode('utf-8').split('\n') if line.strip()]
+    else:
+        return []
+
     parsed_data = []
     
     for line in lines:
         try:
             # Separă ID-ul de combinație (prima virgulă)
-            id_str, combination_str = line.split(',', 1)
+            # Folosim rsplit pentru a fi siguri că despărțim doar la prima virgulă
+            parts = line.split(',', 1)
+            if len(parts) != 2:
+                 continue
+
+            id_str, combination_str = parts
             variant_id = id_str.strip()
+            
             # Extrage numerele (le separă după spațiu)
             numbers_list = [int(n.strip()) for n in combination_str.split() if n.strip().isdigit()]
             
@@ -45,33 +60,26 @@ def balance_variants(all_variants, max_occurrence):
     if not all_variants:
         return [], Counter()
 
-    # 1. Inițializare
     selected_ids = set()
     current_counts = Counter()
     
-    # Randomizăm ordinea variantelor pentru a evita biasul
     random.shuffle(all_variants)
 
-    # 2. Procesul de selecție iterativă (Greedy)
     for variant in all_variants:
         variant_id = variant[0]
-        # variant[1] este setul de numere
         numbers_set = variant[1] 
         
-        # Verificăm dacă varianta poate fi adăugată fără a depăși limita N
         can_be_added = True
         for num in numbers_set:
             if current_counts[num] >= max_occurrence:
                 can_be_added = False
                 break
         
-        # Dacă este OK, o adăugăm și actualizăm contorul
         if can_be_added:
             selected_ids.add(variant_id)
             for num in numbers_set:
                 current_counts[num] += 1
 
-    # 3. Construirea rezultatului final (doar variantele selectate)
     final_result_tuples = [v for v in all_variants if v[0] in selected_ids]
     
     return final_result_tuples, current_counts
@@ -102,29 +110,49 @@ with st.sidebar:
         help="Vor fi procesate doar variantele care conțin exact K numere."
     )
 
-st.subheader("1. Introduceți Variantele")
-# Câmpul de text este gol (value="")
+st.subheader("1. Sursa Datelor (Variante)")
+
+# Opțiune 1: Import fișier .txt
+uploaded_file = st.file_uploader(
+    "Importă variantele dintr-un fișier .txt",
+    type=['txt'],
+    help="Formatul liniei: ID, Numar1 Numar2 Numar3..."
+)
+
+st.markdown("---")
+st.markdown("**SAU**")
+
+# Opțiune 2: Introducere manuală (câmpul este gol)
 input_text = st.text_area(
-    "Lipiți variantele aici (câte o variantă pe rând).",
-    value="",  # Acum este gol
+    "Lipiți variantele manual aici:",
+    value="",
     height=200,
     placeholder="Exemplu:\n1, 61 34 2 7\n2, 33 24 57 4\n...",
-    help=f"Format: ID, Numar1 Numar2 Numar3... Asigură-te că fiecare variantă conține {numbers_per_variant} numere, conform setării K."
+    help=f"Asigură-te că fiecare variantă conține {numbers_per_variant} numere, conform setării K."
 )
 
 st.divider()
 
 if st.button("🚀 Rulează Echilibrarea"):
-    if not input_text:
-        st.error("Vă rugăm introduceți date în câmpul de text.")
+    
+    data_source = None
+    if uploaded_file is not None:
+        # Prioritizează fișierul încărcat
+        data_source = uploaded_file.getvalue()
+    elif input_text.strip():
+        # Folosește textul lipit
+        data_source = input_text
+    
+    if data_source is None:
+        st.error("Vă rugăm introduceți date manual SAU încărcați un fișier .txt.")
     else:
         # 1. Parsare
-        all_variants = parse_input(input_text, numbers_per_variant)
+        all_variants = parse_input(data_source, numbers_per_variant)
         
         if not all_variants:
-            st.error(f"Nu s-au putut parsa variante valide care să conțină exact {numbers_per_variant} numere. Verificați formatul și setarea K.")
+            st.error(f"Nu s-au putut parsa variante valide care să conțină exact {numbers_per_variant} numere. Verificați formatul datelor (ID, Numar Numar...) și setarea K.")
         else:
-            total_variants = len(all_variants)
+            total_variants_processed = len(all_variants)
             
             # 2. Echilibrare
             final_result_tuples, final_counts = balance_variants(all_variants, max_occurrence)
@@ -136,7 +164,7 @@ if st.button("🚀 Rulează Echilibrarea"):
                 st.info("Nu a putut fi selectată nicio variantă care să respecte ambele condiții (K și N).")
             else:
                 num_selected = len(final_result_tuples)
-                st.success(f"Au fost selectate **{num_selected}** variante din **{total_variants}** care au avut {numbers_per_variant} numere.")
+                st.success(f"Au fost selectate **{num_selected}** variante din **{total_variants_processed}** care au avut {numbers_per_variant} numere.")
                 
                 # Construiește șirul de text pentru copiere
                 text_to_copy_lines = []
