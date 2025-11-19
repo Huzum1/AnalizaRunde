@@ -26,12 +26,11 @@ def parse_input(input_text):
             id_str, combination_str = line.split(',', 1)
             variant_id = id_str.strip()
             # Extrage numerele (le separă după spațiu)
-            # Folosim set pentru a ne asigura că nu avem numere duplicate în interiorul unei variante
             numbers = [int(n.strip()) for n in combination_str.split() if n.strip().isdigit()]
             
             if numbers:
-                # Stocăm varianta ca o tuplă (ID, set de numere, linie_originala)
-                parsed_data.append((variant_id, set(numbers), line))
+                # Stocăm varianta ca o tuplă (ID, set de numere)
+                parsed_data.append((variant_id, set(numbers)))
                 
         except:
             # Ignorăm liniile cu format greșit
@@ -71,7 +70,6 @@ def balance_variants(all_variants, max_occurrence):
                 current_counts[num] += 1
 
     # 3. Construirea rezultatului final (doar variantele selectate)
-    # Păstrăm ordinea inițială a liniilor originale
     final_result_tuples = [v for v in all_variants if v[0] in selected_ids]
     
     return final_result_tuples, current_counts
@@ -125,12 +123,19 @@ if st.button("🚀 Rulează Echilibrarea"):
                 num_selected = len(final_result_tuples)
                 st.success(f"Au fost selectate **{num_selected}** variante din **{total_variants}** totale.")
                 
-                # Construiește șirul de text pentru copiere
-                # V3[2] este linia originală ('1, 61 34 2 7')
-                text_to_copy = "\n".join([v[2] for v in final_result_tuples])
+                # Construiește șirul de text pentru copiere în formatul dorit: ID, Numar1 Numar2...
+                text_to_copy_lines = []
+                for v in final_result_tuples:
+                    variant_id = v[0]
+                    # Sortăm numerele înainte de a le uni (opțional, dar recomandat)
+                    numbers_str = ' '.join(map(str, sorted(list(v[1]))))
+                    # Reconstruim linia cu formatul explicit: ID, [SPATIU] Numere
+                    text_to_copy_lines.append(f"{variant_id}, {numbers_str}")
+                
+                text_to_copy = "\n".join(text_to_copy_lines)
 
                 # --- Chenar pentru Copiere ---
-                st.subheader("📋 Variante pentru Copiere")
+                st.subheader("📋 Variante pentru Copiere (Format: ID, Numar Numar...)")
                 st.code(text_to_copy, language='text')
 
                 # Afișare în tabel (pentru vizualizare rapidă)
