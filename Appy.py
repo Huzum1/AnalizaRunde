@@ -1,79 +1,93 @@
 import streamlit as st
 import pandas as pd
-from collections import Counter
+from collections import defaultdict, Counter
+import random
 
 # --- Configurare Pagină ---
 st.set_page_config(
-    page_title="Filtru Variante Unice",
+    page_title="Echilibrare Frecvențe Variante",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # Titlul aplicației
-st.title("🔢 Filtru de Variante după Frecvența Numerelor")
+st.title("⚖️ Echilibrare Frecvențe Variante (Limita N)")
 
 # --- Funcția de Procesare a Datelor ---
-def process_data(input_text, max_occurrence):
-    """Procesează datele de intrare și filtrează variantele."""
-    
-    # 1. Parsarea datelor
+def parse_input(input_text):
+    """Parsează datele introduse manual."""
     lines = [line.strip() for line in input_text.split('\n') if line.strip()]
     
-    if not lines:
-        return pd.DataFrame(), Counter(), []
-
     parsed_data = []
-    all_numbers = []
-
+    
     for line in lines:
         try:
             # Separă ID-ul de combinație (prima virgulă)
             id_str, combination_str = line.split(',', 1)
-            
             variant_id = id_str.strip()
             # Extrage numerele (le separă după spațiu)
             numbers = [int(n.strip()) for n in combination_str.split() if n.strip().isdigit()]
             
             if numbers:
-                parsed_data.append({'ID': variant_id, 'Numere': numbers, 'Linie_Originala': line})
-                all_numbers.extend(numbers)
+                # Stocăm varianta ca o tuplă (ID, set de numere)
+                parsed_data.append((variant_id, set(numbers), line))
                 
-        except ValueError:
-            st.warning(f"Avertisment: Linia '{line}' a fost ignorată. Formatul nu este corect (ID, Numar Numar...).")
-        except Exception as e:
-            st.error(f"Eroare la procesarea liniei '{line}': {e}")
+        except:
+            # Ignorăm liniile cu format greșit
+            continue
             
-    if not parsed_data:
-        return pd.DataFrame(), Counter(), []
+    return parsed_data
 
-    # 2. Calculul Frecvenței
-    # Calculează de câte ori apare fiecare număr în total (pe toate variantele)
-    number_counts = Counter(all_numbers)
+def balance_variants(all_variants, max_occurrence):
+    """Echilibrează selecția variantelor pentru a respecta limita de repetiție."""
     
-    # 3. Filtrarea Variantelor
-    # O variantă este păstrată DOAR dacă TOATE numerele ei au o frecvență <= max_occurrence
+    if not all_variants:
+        return []
+
+    # 1. Indexarea variantelor după număr
+    # variants_by_number[numar] = [variant_originala1, variant_originala2, ...]
+    variants_by_number = defaultdict(list)
+    for variant in all_variants:
+        for num in variant[1]: # variant[1] este setul de numere
+            variants_by_number[num].append(variant)
+
+    # 2. Inițializare
+    # Selected: Set de ID-uri (chei unice) ale variantelor selectate
+    selected_ids = set()
+    # Current_Counts: Contorul de frecvență al numerelor în setul rezultat
+    current_counts = Counter()
     
-    filtered_variants = []
+    # Randomizăm ordinea numerelor pentru a evita biasul
+    all_numbers = list(variants_by_number.keys())
+    random.shuffle(all_numbers)
+
+    # 3. Procesul de selecție iterativă
+    # Prioritizăm variantele care conțin numere mai puțin frecvente în selecția curentă.
     
-    for item in parsed_data:
-        is_unique_enough = True
+    # Sortăm variantele inițiale o singură dată (ID, set, linie_originala)
+    random.shuffle(all_variants)
+
+    for variant in all_variants:
+        variant_id = variant[0]
+        numbers = variant[1]
         
-        # Verifică frecvența fiecărui număr din varianta curentă
-        for num in item['Numere']:
-            if number_counts[num] > max_occurrence:
-                is_unique_enough = False
+        # Verificăm dacă varianta poate fi adăugată fără a depăși limita
+        can_be_added = True
+        for num in numbers:
+            if current_counts[num] >= max_occurrence:
+                can_be_added = False
                 break
         
-        if is_unique_enough:
-            filtered_variants.append(item)
-            
-    # Pregătirea rezultatului pentru afișare
-    df_filtered = pd.DataFrame([
-        {'ID': item['ID'], 'Numere': ' '.join(map(str, item['Numere'])), 'Linie_Originala': item['Linie_Originala']}
-        for item in filtered_variants
-    ])
+        # Dacă este OK, o adăugăm și actualizăm contorul
+        if can_be_added:
+            selected_ids.add(variant_id)
+            for num in numbers:
+                current_counts[num] += 1
+
+    # 4. Construirea rezultatului final (doar variantele selectate)
+    final_result = [v for v in all_variants if v[0] in selected_ids]
     
-    return df_filtered, number_counts, parsed_data
+    return final_result, current_counts
 
 # --- Interfață Utilizator (UI) ---
 
@@ -81,54 +95,66 @@ with st.sidebar:
     st.header("⚙️ Setări")
     
     # Câmpul de setare a limitei de repetiție
-    max_occurrence = st.slider(
-        "Maximul de Repetiții Permise (N):",
+    max_occurrence = st.number_input(
+        "Limită Maximă de Apariții (N) per Număr:",
         min_value=1, 
-        max_value=50, 
+        max_value=10000, 
         value=15, 
         step=1,
-        help="Un număr nu poate apărea în întregul set de date de mai mult de N ori pentru ca varianta sa să fie considerată unică."
+        help="Niciun număr (e.g., 7) nu va apărea în setul de variante rezultat de mai mult de N ori."
     )
+    st.info("Logica: Aplicația încearcă să selecteze cât mai multe variante din total, respectând limita N pentru fiecare număr individual.")
 
 st.subheader("1. Introduceți Variantele")
 input_text = st.text_area(
     "Lipiți variantele aici (câte o variantă pe rând).",
-    value="1, 61 34 2 7\n2, 33 24 57 4\n3, 61 1 5 7\n4, 61 7 8 9\n5, 1 2 3 4",
+    value="1, 61 34 2 7\n2, 33 24 57 4\n3, 61 1 5 7\n4, 61 7 8 9\n5, 1 2 3 4\n6, 7 10 11 12\n7, 7 13 14 15\n8, 7 16 17 18\n9, 7 19 20 21\n10, 7 22 23 24\n11, 7 25 26 27\n12, 7 28 29 30\n13, 7 31 32 33\n14, 7 34 35 36\n15, 7 37 38 39\n16, 7 40 41 42\n17, 7 43 44 45\n18, 7 46 47 48\n19, 7 49 50 51\n20, 7 52 53 54\n21, 7 55 56 57",
     height=200,
-    help="Format: ID, Numar1 Numar2 Numar3..."
+    help="Format: ID, Numar1 Numar2 Numar3... (folosește un ID unic pentru fiecare rând)."
 )
 
 st.divider()
 
-if st.button("🚀 Rulează Filtrarea"):
+if st.button("🚀 Rulează Echilibrarea"):
     if not input_text:
         st.error("Vă rugăm introduceți date în câmpul de text.")
     else:
-        # Apelarea funcției de procesare
-        df_filtered, number_counts, all_variants = process_data(input_text, max_occurrence)
-
-        # Afișarea rezultatelor
-        st.subheader(f"2. Rezultate Filtrate (Frecvență Max. = {max_occurrence})")
-
-        if df_filtered.empty:
-            st.info("Nu a fost găsită nicio variantă care să îndeplinească condiția de unicitate.")
+        # 1. Parsare
+        all_variants = parse_input(input_text)
+        
+        if not all_variants:
+            st.error("Nu s-au putut parsa variante valide. Verificați formatul (ID, Numar Numar...).")
         else:
-            st.success(f"Au fost găsite **{len(df_filtered)}** variante unice din **{len(all_variants)}** total:")
-            st.dataframe(df_filtered[['ID', 'Numere']], hide_index=True)
+            total_variants = len(all_variants)
             
-            # --- Detalii Utile ---
-            st.subheader("3. Detalii despre Frecvența Numerelor")
-            
-            # Creare DataFrame pentru afișarea frecvenței
-            counts_df = pd.DataFrame(number_counts.items(), columns=['Număr', 'Frecvență'])
-            counts_df = counts_df.sort_values(by='Frecvență', ascending=False)
-            
-            st.dataframe(counts_df, height=300, hide_index=True)
-            
-            # Evidențierea numerelor "saturate"
-            saturated_numbers = counts_df[counts_df['Frecvență'] > max_occurrence]
-            if not saturated_numbers.empty:
-                 st.warning(f"🚨 Numerele de mai jos apar de mai mult de {max_occurrence} ori și au cauzat excluderea variantelor care le conțineau:")
-                 st.dataframe(saturated_numbers, hide_index=True)
+            # 2. Echilibrare
+            final_result, final_counts = balance_variants(all_variants, max_occurrence)
+
+            # 3. Afișare Rezultate
+            st.subheader(f"2. Rezultate Echilibrate (Limită N = {max_occurrence})")
+
+            if not final_result:
+                st.info("Nu a putut fi selectată nicio variantă.")
             else:
-                 st.info("Toate numerele din setul de date respectă limita de repetiție.")
+                num_selected = len(final_result)
+                st.success(f"Au fost selectate **{num_selected}** variante din **{total_variants}** totale.")
+                
+                # Pregătirea rezultatului pentru afișare
+                df_final = pd.DataFrame([
+                    {'ID': v[0], 'Numere': ' '.join(map(str, sorted(list(v[1])))), 'Linie_Originala': v[2]}
+                    for v in final_result
+                ])
+
+                # Afișează numerele în ordine crescătoare în coloana Numere
+                st.dataframe(df_final[['ID', 'Numere']], hide_index=True)
+                
+                # --- Detalii Utile ---
+                st.subheader("3. Verificarea Frecvenței în Setul Rezultat")
+                
+                # Creare DataFrame pentru afișarea frecvenței finale
+                counts_df = pd.DataFrame(final_counts.items(), columns=['Număr', 'Frecvență'])
+                counts_df = counts_df.sort_values(by='Frecvență', ascending=False)
+                
+                st.info(f"Frecvența maximă obținută este: **{counts_df['Frecvență'].max() if not counts_df.empty else 0}** (ar trebui să fie $\le {max_occurrence}$)")
+                
+                st.dataframe(counts_df, height=300, hide_index=True)
